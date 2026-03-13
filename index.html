@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SYSTEM — Life RPG</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="particles" id="particles"></div>
+<div class="notif-container" id="notifContainer"></div>
+
+<!-- Level Up Overlay -->
+<div class="levelup-overlay" id="levelupOverlay">
+  <div class="levelup-card">
+    <div class="levelup-text">LEVEL UP!</div>
+    <div class="levelup-sub" id="levelupNewLevel">LEVEL 2</div>
+  </div>
+</div>
+
+<!-- Reboot Overlay -->
+<div class="penalty-overlay" id="rebootOverlay">
+  <div class="penalty-card" style="border-color:var(--muted);">
+    <div class="penalty-warning" style="color:var(--muted);animation:none;">⚠ SYSTEM REBOOT ⚠</div>
+    <div class="penalty-text" style="color:var(--muted);font-size:42px;animation:none;">REBOOT?</div>
+    <div class="penalty-sub" style="color:#aaa;">ALL PROGRESS WILL BE ERASED</div>
+    <div class="penalty-details" style="border-color:rgba(100,100,100,0.3);color:#888;">LEVEL · XP · STATS · QUESTS · HISTORY — ALL RESET</div>
+    <div class="penalty-quote">"Every legend has a starting point."</div>
+    <div style="display:flex;gap:12px;justify-content:center;">
+      <button class="btn btn-danger penalty-btn" onclick="confirmReboot()">⟳ CONFIRM REBOOT</button>
+      <button class="btn penalty-btn" onclick="closeReboot()">✕ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Penalty Overlay -->
+<div class="penalty-overlay" id="penaltyOverlay">
+  <div class="penalty-card">
+    <div class="penalty-warning">⚠ SYSTEM WARNING ⚠</div>
+    <div class="penalty-text">PENALTY</div>
+    <div class="penalty-sub">YOU HAVE FAILED YOUR QUEST</div>
+    <div class="penalty-details" id="penaltyDetails">-20 XP · STAT DECREASED · STREAK RESET</div>
+    <div class="penalty-quote">"The weak do not get to choose their fate."</div>
+    <button class="btn btn-danger penalty-btn" onclick="closePenalty()">ACCEPT PUNISHMENT</button>
+  </div>
+</div>
+
+<div class="app">
+  <div class="header">
+    <div class="system-alert">◈ SYSTEM INITIALIZED ◈</div>
+    <h1>LIFE <span>SYSTEM</span></h1>
+    <div class="header-sub">// SELF IMPROVEMENT PROTOCOL ACTIVE //</div>
+    <button class="btn reboot-btn" onclick="openReboot()">⟳ REBOOT SYSTEM</button>
+  </div>
+  <div class="divider"></div>
+
+  <div class="grid">
+
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+      <div class="panel player-card">
+        <div class="panel-title">PLAYER STATUS</div>
+        <div class="player-avatar">
+          <div class="avatar-ring">⚔️</div>
+        </div>
+        <div class="player-name" id="playerName">HUNTER</div>
+        <div class="player-title">ARISE FROM THE SHADOW</div>
+        <div class="rank-badge" id="rankBadge">RANK E</div>
+        <div class="level-display" id="levelDisplay">1<span>LEVEL</span></div>
+        <div class="xp-section">
+          <div class="xp-label">
+            <span>EXPERIENCE</span>
+            <span id="xpLabel">0 / 100 XP</span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill" id="xpBar" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">ATTRIBUTES</div>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-label">💪 STR</div>
+            <div class="stat-value" id="stat-strength">1</div>
+            <div class="stat-bar"><div class="stat-bar-fill" id="bar-strength" style="width:1%"></div></div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">🧠 INT</div>
+            <div class="stat-value" id="stat-intelligence">1</div>
+            <div class="stat-bar"><div class="stat-bar-fill" id="bar-intelligence" style="width:1%"></div></div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">⚡ AGI</div>
+            <div class="stat-value" id="stat-agility">1</div>
+            <div class="stat-bar"><div class="stat-bar-fill" id="bar-agility" style="width:1%"></div></div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-label">❤️ VIT</div>
+            <div class="stat-value" id="stat-vitality">1</div>
+            <div class="stat-bar"><div class="stat-bar-fill" id="bar-vitality" style="width:1%"></div></div>
+          </div>
+          <div class="stat-item" style="grid-column:span 2;">
+            <div class="stat-label">👁️ PER — Perception</div>
+            <div class="stat-value" id="stat-perception">1</div>
+            <div class="stat-bar"><div class="stat-bar-fill" id="bar-perception" style="width:1%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">RECORDS</div>
+        <div class="total-stats">
+          <div class="total-stat-card">
+            <div class="total-stat-num" id="totalQuests">0</div>
+            <div class="total-stat-label">QUESTS</div>
+          </div>
+          <div class="total-stat-card">
+            <div class="total-stat-num" id="totalXP">0</div>
+            <div class="total-stat-label">TOTAL XP</div>
+          </div>
+          <div class="total-stat-card">
+            <div class="total-stat-num" id="totalDays">0</div>
+            <div class="total-stat-label">STREAK</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+
+      <div class="panel">
+        <div class="panel-title">DAILY QUESTS</div>
+        <div class="quest-input-row">
+          <input class="quest-input" type="text" id="questInput" placeholder="Enter your quest (e.g. 'Study for 1 hour')..." />
+          <select class="quest-input" id="questType">
+            <option value="strength">💪 Strength</option>
+            <option value="intelligence">🧠 Intelligence</option>
+            <option value="agility">⚡ Agility</option>
+            <option value="vitality">❤️ Vitality</option>
+            <option value="perception">👁️ Perception</option>
+          </select>
+          <button class="btn" onclick="addQuest()">+ ADD</button>
+        </div>
+        <div class="quest-list" id="questList">
+          <div class="empty-state">[ NO ACTIVE QUESTS — ADD YOUR FIRST QUEST ]</div>
+        </div>
+      </div>
+
+      <div class="panel penalty-quest-panel" id="penaltyQuestPanel" style="display:none;">
+        <div class="panel-title penalty-title">☠ PENALTY QUESTS — MANDATORY</div>
+        <div class="penalty-quest-warning">FAILURE TO COMPLETE WILL RESULT IN FURTHER PUNISHMENT</div>
+        <div class="quest-list" id="penaltyQuestList"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">ACTIVITY LOG</div>
+        <div class="history-list" id="historyList">
+          <div style="text-align:center;color:var(--muted);font-family:'Share Tech Mono';font-size:11px;padding:20px;">[ AWAITING FIRST ACTIVITY ]</div>
+        </div>
+      </div>
+
+      <div class="panel radar-panel">
+        <div class="panel-title">STAT RADAR</div>
+        <div class="radar-wrapper">
+          <div class="radar-score-box">
+            <div class="radar-score-num" id="radarScore">1.00</div>
+            <div class="radar-score-label">POWER SCORE</div>
+          </div>
+          <canvas id="radarCanvas" width="260" height="260"></canvas>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">STAT DISTRIBUTION</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;" id="statBars"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

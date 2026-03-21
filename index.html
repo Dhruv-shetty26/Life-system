@@ -11,21 +11,77 @@
 
 <div class="particles" id="particles"></div>
 <div class="notif-container" id="notifContainer"></div>
+<div class="combo-display" id="comboDisplay"></div>
+<div class="shadow-march" id="shadowMarch"></div>
+<div class="rank-bg-effect" id="rankBgEffect"></div>
+
+<!-- Hunter Name Modal -->
+<div class="modal-overlay active" id="nameModal">
+  <div class="modal-card">
+    <div class="modal-title">◈ SYSTEM INITIALIZED ◈</div>
+    <div class="modal-heading">ENTER YOUR HUNTER NAME</div>
+    <input class="quest-input" type="text" id="nameInput" placeholder="e.g. Sung Jinwoo..." maxlength="20"/>
+    <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;">
+      <label style="font-family:'Share Tech Mono';font-size:11px;color:var(--muted);">UPLOAD AVATAR (optional)</label>
+      <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)"/>
+      <button class="btn" onclick="document.getElementById('avatarUpload').click()" style="border-color:var(--purple);color:var(--purple);">📷 UPLOAD AVATAR</button>
+      <div id="avatarPreview" style="display:none;margin:8px auto;width:70px;height:70px;border-radius:50%;overflow:hidden;border:2px solid var(--glow);">
+        <img id="avatarPreviewImg" style="width:100%;height:100%;object-fit:cover;"/>
+      </div>
+    </div>
+    <button class="btn" onclick="setHunterName()" style="margin-top:14px;width:100%;">⚔ BEGIN JOURNEY</button>
+  </div>
+</div>
 
 <!-- Level Up Overlay -->
-<div class="levelup-overlay" id="levelupOverlay">
+<div class="modal-overlay" id="levelupOverlay">
   <div class="levelup-card">
     <div class="levelup-text">LEVEL UP!</div>
     <div class="levelup-sub" id="levelupNewLevel">LEVEL 2</div>
   </div>
 </div>
 
+<!-- Prestige Overlay -->
+<div class="modal-overlay" id="prestigeOverlay">
+  <div class="levelup-card">
+    <div style="font-size:60px;">⭐</div>
+    <div class="levelup-text" style="color:#fff;font-size:40px;">PRESTIGE!</div>
+    <div class="levelup-sub" style="color:var(--gold);" id="prestigeLevel">PRESTIGE I</div>
+    <div style="font-family:'Share Tech Mono';font-size:12px;color:var(--muted);margin-top:8px;">+2 PERMANENT BONUS TO ALL STATS</div>
+    <button class="btn" onclick="document.getElementById('prestigeOverlay').classList.remove('active')" style="margin-top:16px;border-color:var(--gold);color:var(--gold);">ARISE ⚔</button>
+  </div>
+</div>
+
+<!-- Rank Ceremony -->
+<div class="modal-overlay" id="rankCeremonyOverlay">
+  <div class="rank-ceremony-card">
+    <div class="rank-ceremony-content">
+      <div class="rank-ceremony-label">RANK ADVANCEMENT</div>
+      <div class="rank-ceremony-old" id="rankCeremonyOld">RANK E</div>
+      <div class="rank-ceremony-arrow">▼</div>
+      <div class="rank-ceremony-new" id="rankCeremonyNew">RANK D</div>
+      <div class="rank-ceremony-title" id="rankCeremonyTitle">IRON HUNTER</div>
+    </div>
+  </div>
+</div>
+
 <!-- Reboot Overlay -->
-<div class="penalty-overlay" id="rebootOverlay">
-  <div class="penalty-card" style="border-color:var(--muted);">
+<div class="modal-overlay" id="rebootOverlay">
+  <div class="penalty-card" style="border-color:var(--muted);max-width:480px;">
     <div class="penalty-warning" style="color:var(--muted);animation:none;">⚠ SYSTEM REBOOT ⚠</div>
-    <div class="penalty-text" style="color:var(--muted);font-size:42px;animation:none;">REBOOT?</div>
-    <div class="penalty-sub" style="color:#aaa;">ALL PROGRESS WILL BE ERASED</div>
+    <div class="penalty-text" style="color:var(--muted);font-size:42px;animation:none;">REBOOT</div>
+    <div class="penalty-sub" style="color:#aaa;margin-bottom:20px;">ALL PROGRESS WILL BE ERASED</div>
+    <div style="text-align:left;margin-bottom:16px;">
+      <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);letter-spacing:2px;margin-bottom:6px;">CHANGE HUNTER NAME (OPTIONAL)</div>
+      <input class="quest-input" id="rebootNameInput" placeholder="Leave empty to keep current name..." style="width:100%;"/>
+    </div>
+    <div style="background:rgba(0,20,40,0.8);border:1px solid var(--border);padding:12px;margin-bottom:16px;text-align:left;">
+      <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);letter-spacing:2px;margin-bottom:6px;">YOUR PLAYER CODE</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="font-family:'Orbitron';font-size:18px;font-weight:700;color:var(--accent);flex:1;letter-spacing:3px;" id="rebootPlayerCode">------</div>
+        <button class="btn" onclick="copyPlayerCode()" style="padding:6px 12px;font-size:10px;border-color:var(--accent);color:var(--accent);">📋 COPY</button>
+      </div>
+    </div>
     <div class="penalty-details" style="border-color:rgba(100,100,100,0.3);color:#888;">LEVEL · XP · STATS · QUESTS · HISTORY — ALL RESET</div>
     <div class="penalty-quote">"Every legend has a starting point."</div>
     <div style="display:flex;gap:12px;justify-content:center;">
@@ -36,156 +92,554 @@
 </div>
 
 <!-- Penalty Overlay -->
-<div class="penalty-overlay" id="penaltyOverlay">
+<div class="modal-overlay" id="penaltyOverlay">
   <div class="penalty-card">
     <div class="penalty-warning">⚠ SYSTEM WARNING ⚠</div>
     <div class="penalty-text">PENALTY</div>
     <div class="penalty-sub">YOU HAVE FAILED YOUR QUEST</div>
-    <div class="penalty-details" id="penaltyDetails">-20 XP · STAT DECREASED · STREAK RESET</div>
+    <div class="penalty-details" id="penaltyDetails"></div>
     <div class="penalty-quote">"The weak do not get to choose their fate."</div>
     <button class="btn btn-danger penalty-btn" onclick="closePenalty()">ACCEPT PUNISHMENT</button>
   </div>
 </div>
 
-<div class="app">
-  <div class="header">
-    <div class="system-alert">◈ SYSTEM INITIALIZED ◈</div>
-    <h1>LIFE <span>SYSTEM</span></h1>
-    <div class="header-sub">// SELF IMPROVEMENT PROTOCOL ACTIVE //</div>
-    <button class="btn reboot-btn" onclick="openReboot()">⟳ REBOOT SYSTEM</button>
-  </div>
-  <div class="divider"></div>
-
-  <div class="grid">
-
-    <!-- LEFT COLUMN -->
-    <div style="display:flex;flex-direction:column;gap:20px;">
-
-      <div class="panel player-card">
-        <div class="panel-title">PLAYER STATUS</div>
-        <div class="player-avatar">
-          <div class="avatar-ring">⚔️</div>
-        </div>
-        <div class="player-name" id="playerName">HUNTER</div>
-        <div class="player-title">ARISE FROM THE SHADOW</div>
-        <div class="rank-badge" id="rankBadge">RANK E</div>
-        <div class="level-display" id="levelDisplay">1<span>LEVEL</span></div>
-        <div class="xp-section">
-          <div class="xp-label">
-            <span>EXPERIENCE</span>
-            <span id="xpLabel">0 / 100 XP</span>
-          </div>
-          <div class="bar-track">
-            <div class="bar-fill" id="xpBar" style="width:0%"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-title">ATTRIBUTES</div>
-        <div class="stats-grid">
-          <div class="stat-item">
-            <div class="stat-label">💪 STR</div>
-            <div class="stat-value" id="stat-strength">1</div>
-            <div class="stat-bar"><div class="stat-bar-fill" id="bar-strength" style="width:1%"></div></div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">🧠 INT</div>
-            <div class="stat-value" id="stat-intelligence">1</div>
-            <div class="stat-bar"><div class="stat-bar-fill" id="bar-intelligence" style="width:1%"></div></div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">⚡ AGI</div>
-            <div class="stat-value" id="stat-agility">1</div>
-            <div class="stat-bar"><div class="stat-bar-fill" id="bar-agility" style="width:1%"></div></div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-label">❤️ VIT</div>
-            <div class="stat-value" id="stat-vitality">1</div>
-            <div class="stat-bar"><div class="stat-bar-fill" id="bar-vitality" style="width:1%"></div></div>
-          </div>
-          <div class="stat-item" style="grid-column:span 2;">
-            <div class="stat-label">👁️ PER — Perception</div>
-            <div class="stat-value" id="stat-perception">1</div>
-            <div class="stat-bar"><div class="stat-bar-fill" id="bar-perception" style="width:1%"></div></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-title">RECORDS</div>
-        <div class="total-stats">
-          <div class="total-stat-card">
-            <div class="total-stat-num" id="totalQuests">0</div>
-            <div class="total-stat-label">QUESTS</div>
-          </div>
-          <div class="total-stat-card">
-            <div class="total-stat-num" id="totalXP">0</div>
-            <div class="total-stat-label">TOTAL XP</div>
-          </div>
-          <div class="total-stat-card">
-            <div class="total-stat-num" id="totalDays">0</div>
-            <div class="total-stat-label">STREAK</div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- RIGHT COLUMN -->
-    <div class="right-col">
-
-      <div class="panel">
-        <div class="panel-title">DAILY QUESTS</div>
-        <div class="quest-input-row">
-          <input class="quest-input" type="text" id="questInput" placeholder="Enter your quest (e.g. 'Study for 1 hour')..." />
-          <select class="quest-input" id="questType">
-            <option value="strength">💪 Strength</option>
-            <option value="intelligence">🧠 Intelligence</option>
-            <option value="agility">⚡ Agility</option>
-            <option value="vitality">❤️ Vitality</option>
-            <option value="perception">👁️ Perception</option>
-          </select>
-          <button class="btn" onclick="addQuest()">+ ADD</button>
-        </div>
-        <div class="quest-list" id="questList">
-          <div class="empty-state">[ NO ACTIVE QUESTS — ADD YOUR FIRST QUEST ]</div>
-        </div>
-      </div>
-
-      <div class="panel penalty-quest-panel" id="penaltyQuestPanel" style="display:none;">
-        <div class="panel-title penalty-title">☠ PENALTY QUESTS — MANDATORY</div>
-        <div class="penalty-quest-warning">FAILURE TO COMPLETE WILL RESULT IN FURTHER PUNISHMENT</div>
-        <div class="quest-list" id="penaltyQuestList"></div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-title">ACTIVITY LOG</div>
-        <div class="history-list" id="historyList">
-          <div style="text-align:center;color:var(--muted);font-family:'Share Tech Mono';font-size:11px;padding:20px;">[ AWAITING FIRST ACTIVITY ]</div>
-        </div>
-      </div>
-
-      <div class="panel radar-panel">
-        <div class="panel-title">STAT RADAR</div>
-        <div class="radar-wrapper">
-          <div class="radar-score-box">
-            <div class="radar-score-num" id="radarScore">1.00</div>
-            <div class="radar-score-label">POWER SCORE</div>
-          </div>
-          <canvas id="radarCanvas" width="260" height="260"></canvas>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-title">STAT DISTRIBUTION</div>
-        <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;" id="statBars"></div>
-      </div>
-
+<!-- Shadow Extraction Overlay -->
+<div class="modal-overlay" id="shadowExtractOverlay">
+  <div class="penalty-card" style="border-color:var(--purple);box-shadow:0 0 60px rgba(123,47,255,0.5);">
+    <div class="penalty-warning" style="color:var(--purple);animation:none;">◈ SHADOW EXTRACTION ◈</div>
+    <div class="penalty-text" style="color:var(--purple);font-size:36px;">ARISE!</div>
+    <div class="penalty-sub" style="color:#cc88ff;">FAILED QUEST CONVERTED TO SHADOW</div>
+    <div class="penalty-details" style="border-color:rgba(123,47,255,0.3);color:#cc88ff;" id="shadowExtractDetails"></div>
+    <div class="penalty-quote">"I alone level up."</div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn" onclick="acceptShadowExtraction()" style="border-color:var(--purple);color:var(--purple);">⚔ EXTRACT SHADOW</button>
+      <button class="btn btn-danger" onclick="closeShadowExtract()">SKIP</button>
     </div>
   </div>
 </div>
 
+<!-- Skill Unlock -->
+<div class="modal-overlay" id="skillOverlay">
+  <div class="levelup-card">
+    <div style="font-size:48px;margin-bottom:10px;" id="skillEmoji">⚡</div>
+    <div class="levelup-text" style="font-size:32px;color:var(--purple);">SKILL UNLOCKED!</div>
+    <div class="levelup-sub" id="skillName" style="color:var(--purple);"></div>
+  </div>
+</div>
+
+<!-- Gear Drop -->
+<div class="modal-overlay" id="gearDropOverlay">
+  <div class="levelup-card">
+    <div style="font-size:56px;" id="gearDropIcon">⚔️</div>
+    <div class="levelup-text" style="font-size:26px;color:var(--gold);">GEAR DROPPED!</div>
+    <div class="levelup-sub" id="gearDropName" style="color:var(--gold);"></div>
+    <div style="font-family:'Share Tech Mono';font-size:11px;color:var(--muted);margin-top:8px;" id="gearDropBonus"></div>
+  </div>
+</div>
+
+<!-- Seasonal Event Overlay -->
+<div class="modal-overlay" id="seasonalOverlay">
+  <div class="levelup-card" style="border:1px solid var(--gold);padding:40px;background:var(--panel);max-width:480px;width:90%;">
+    <div style="font-size:56px;" id="seasonalIcon">🎉</div>
+    <div class="levelup-text" style="font-size:28px;color:var(--gold);" id="seasonalTitle">SEASONAL EVENT!</div>
+    <div style="font-family:'Share Tech Mono';font-size:12px;color:var(--muted);margin:8px 0;" id="seasonalDesc"></div>
+    <div style="font-family:'Orbitron';font-size:14px;color:var(--danger);margin:8px 0;" id="seasonalCountdown"></div>
+    <button class="btn" onclick="document.getElementById('seasonalOverlay').classList.remove('active')" style="margin-top:12px;border-color:var(--gold);color:var(--gold);">JOIN EVENT ⚔</button>
+  </div>
+</div>
+
+<!-- Goal Setting Modal -->
+<div class="modal-overlay" id="goalModal">
+  <div class="modal-card">
+    <div class="modal-title">◈ SET GOAL ◈</div>
+    <div class="modal-heading" style="font-size:16px;" id="goalStatName">STR GOAL</div>
+    <div style="margin-bottom:12px;">
+      <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-bottom:6px;">TARGET VALUE</div>
+      <input class="quest-input" type="number" id="goalTargetInput" min="1" max="99" placeholder="e.g. 50" style="width:100%;"/>
+    </div>
+    <div style="margin-bottom:16px;">
+      <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-bottom:6px;">TARGET DATE</div>
+      <input class="quest-input" type="date" id="goalDateInput" style="width:100%;"/>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-success" onclick="saveGoal()">✓ SET GOAL</button>
+      <button class="btn btn-danger" onclick="closeGoalModal()">✕ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Rank Title Modal -->
+<div class="modal-overlay" id="rankTitleModal">
+  <div class="modal-card">
+    <div class="modal-title">◈ CUSTOM RANK TITLE ◈</div>
+    <div class="modal-heading" style="font-size:16px;">SET YOUR RANK TITLE</div>
+    <div style="font-family:'Share Tech Mono';font-size:11px;color:var(--muted);margin-bottom:12px;" id="currentRankDisplay"></div>
+    <input class="quest-input" id="rankTitleInput" placeholder="e.g. Gym Rat, Bookworm..." maxlength="20" style="width:100%;margin-bottom:16px;"/>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-success" onclick="saveRankTitle()">✓ SAVE</button>
+      <button class="btn" onclick="resetRankTitle()" style="border-color:var(--muted);color:var(--muted);">↺ RESET</button>
+      <button class="btn btn-danger" onclick="closeRankTitleModal()">✕ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Icon Modal -->
+<div class="modal-overlay" id="iconModal">
+  <div class="modal-card">
+    <div class="modal-title">◈ CUSTOMIZE QUEST ◈</div>
+    <div class="modal-heading" style="font-size:14px;" id="iconModalQuestName"></div>
+    <div style="margin-bottom:12px;">
+      <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-bottom:6px;">PICK AN ICON</div>
+      <div id="iconPicker" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:12px;"></div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-bottom:6px;">BORDER COLOR</div>
+      <div id="colorPicker" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;"></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-success" onclick="saveQuestCustom()">✓ SAVE</button>
+      <button class="btn btn-danger" onclick="closeIconModal()">✕ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Weekly Report -->
+<div class="modal-overlay" id="reportOverlay">
+  <div class="penalty-card" style="border-color:var(--gold);max-width:520px;">
+    <div class="penalty-warning" style="color:var(--gold);animation:none;">◈ WEEKLY REPORT ◈</div>
+    <div class="penalty-text" style="color:var(--gold);font-size:32px;animation:none;">WEEK SUMMARY</div>
+    <div id="reportContent" style="margin:16px 0;text-align:left;"></div>
+    <button class="btn" onclick="closeReport()" style="border-color:var(--gold);color:var(--gold);">CLOSE REPORT</button>
+  </div>
+</div>
+
+<!-- Boss Victory -->
+<div class="modal-overlay" id="bossVictoryOverlay">
+  <div class="levelup-card">
+    <div style="font-size:60px;">👑</div>
+    <div class="levelup-text" style="color:var(--gold);">BOSS CLEARED!</div>
+    <div class="levelup-sub" id="bossReward">+200 XP REWARD</div>
+  </div>
+</div>
+
+<!-- Milestone -->
+<div class="modal-overlay" id="milestoneOverlay">
+  <div class="levelup-card">
+    <div style="font-size:48px;" id="milestoneEmoji">🔥</div>
+    <div class="levelup-text" style="font-size:28px;color:var(--success);">MILESTONE!</div>
+    <div class="levelup-sub" id="milestoneName" style="color:var(--success);"></div>
+  </div>
+</div>
+
+<!-- PvP -->
+<div class="modal-overlay" id="pvpOverlay">
+  <div class="penalty-card" style="border-color:var(--danger);max-width:480px;">
+    <div class="penalty-warning">⚔ PVP CHALLENGE ⚔</div>
+    <div class="penalty-text" style="font-size:32px;">CHALLENGE</div>
+    <div class="penalty-sub">SHARE YOUR CODE — PASTE OPPONENT CODE</div>
+    <div style="margin:16px 0;">
+      <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-bottom:6px;">YOUR CODE</div>
+      <input class="quest-input" id="pvpCodeInput" style="width:100%;text-align:center;margin-bottom:10px;" readonly/>
+      <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-bottom:6px;">OPPONENT CODE</div>
+      <input class="quest-input" id="pvpOpponentInput" placeholder="Paste opponent code here..." style="width:100%;"/>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-danger" onclick="startPvP()">⚔ START BATTLE</button>
+      <button class="btn" onclick="closePvP()">✕ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pomodoro -->
+<div class="modal-overlay" id="pomodoroOverlay">
+  <div class="modal-card" style="border-color:var(--accent);">
+    <div class="modal-title">◈ FOCUS MODE ◈</div>
+    <div style="font-family:'Orbitron';font-size:56px;font-weight:900;color:var(--accent);text-shadow:0 0 20px var(--glow);margin:10px 0;" id="pomodoroTime">25:00</div>
+    <div style="font-family:'Share Tech Mono';font-size:12px;color:var(--muted);margin-bottom:16px;" id="pomodoroQuestName"></div>
+    <div class="bar-track" style="margin-bottom:16px;"><div class="bar-fill" id="pomodoroBar" style="width:100%"></div></div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn" id="pomodoroBtn" onclick="togglePomodoro()">▶ START</button>
+      <button class="btn btn-danger" onclick="cancelPomodoro()">✕ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Note Modal -->
+<div class="modal-overlay" id="noteModal">
+  <div class="modal-card">
+    <div class="modal-title">◈ QUEST NOTE ◈</div>
+    <div class="modal-heading" id="noteQuestName" style="font-size:14px;margin-bottom:12px;"></div>
+    <textarea class="quest-input" id="noteTextarea" placeholder="Add notes or details..." style="height:120px;resize:none;width:100%;"></textarea>
+    <div style="display:flex;gap:10px;margin-top:12px;justify-content:center;">
+      <button class="btn" onclick="saveNote()">💾 SAVE</button>
+      <button class="btn btn-danger" onclick="closeNote()">✕ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Chain Modal -->
+<div class="modal-overlay" id="chainModal">
+  <div class="modal-card" style="max-width:520px;">
+    <div class="modal-title">◈ QUEST CHAINS ◈</div>
+    <div class="modal-heading" style="font-size:14px;margin-bottom:12px;">CREATE A QUEST CHAIN</div>
+    <input class="quest-input" id="chainName" placeholder="Chain name..." style="width:100%;margin-bottom:8px;"/>
+    <div id="chainSteps" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+    <button class="btn" onclick="addChainStep()" style="width:100%;margin-bottom:8px;font-size:10px;">+ ADD STEP</button>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-success" onclick="saveChain()">✓ CREATE</button>
+      <button class="btn btn-danger" onclick="closeChainModal()">✕ CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- Guild Modal -->
+<div class="modal-overlay" id="guildModal">
+  <div class="modal-card" style="max-width:480px;border-color:var(--gold);">
+    <div class="modal-title" style="color:var(--gold);">◈ GUILD SYSTEM ◈</div>
+    <div id="guildContent"></div>
+  </div>
+</div>
+
+<div class="app">
+  <!-- HEADER -->
+  <div class="header">
+    <div class="system-alert">◈ SYSTEM INITIALIZED ◈</div>
+    <h1>LIFE <span>SYSTEM</span></h1>
+    <div class="header-sub">// SELF IMPROVEMENT PROTOCOL ACTIVE //</div>
+    <div class="header-btns">
+      <button class="btn theme-btn" onclick="toggleTheme()" id="themeBtn">🌑 ARISE MODE</button>
+      <button class="btn export-btn" onclick="exportCard()">📤 EXPORT</button>
+      <button class="btn" onclick="openGuild()" style="border-color:var(--gold);color:var(--gold);">⚜ GUILD</button>
+      <button class="btn" onclick="openPvP()" style="border-color:var(--danger);color:var(--danger);">⚔ PVP</button>
+      <button class="btn" onclick="toggleSound()" id="soundBtn" style="border-color:var(--muted);color:var(--muted);">🔊 SOUND ON</button>
+      <button class="btn reboot-btn" onclick="openReboot()">⟳ REBOOT</button>
+    </div>
+  </div>
+  <div class="divider"></div>
+
+  <!-- SEASONAL EVENT BANNER -->
+  <div id="seasonalBanner" style="display:none;" class="seasonal-banner">
+    <div class="seasonal-banner-inner">
+      <span id="seasonalBannerIcon">🎉</span>
+      <span id="seasonalBannerText">EVENT ACTIVE</span>
+      <span class="seasonal-timer" id="seasonalBannerTimer"></span>
+      <button class="btn" onclick="document.getElementById('seasonalOverlay').classList.add('active')" style="padding:4px 10px;font-size:9px;border-color:var(--gold);color:var(--gold);">VIEW</button>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('main',this)">⚔ MAIN</button>
+    <button class="tab-btn" onclick="switchTab('dashboard',this)">📊 DASHBOARD</button>
+    <button class="tab-btn" onclick="switchTab('habits',this)">📋 HABITS</button>
+    <button class="tab-btn" onclick="switchTab('chains',this)">🔗 CHAINS</button>
+    <button class="tab-btn" onclick="switchTab('gear',this)">🛡️ GEAR</button>
+    <button class="tab-btn" onclick="switchTab('stats',this)">📈 STATS</button>
+    <button class="tab-btn" onclick="switchTab('badges',this)">🏆 BADGES</button>
+  </div>
+
+  <!-- ===== MAIN TAB ===== -->
+  <div class="tab-content active" id="tab-main">
+    <div class="grid">
+      <!-- LEFT -->
+      <div style="display:flex;flex-direction:column;gap:20px;">
+
+        <!-- Player Card -->
+        <div class="panel player-card">
+          <div class="panel-title">PLAYER STATUS</div>
+          <!-- Prestige Stars -->
+          <div id="prestigeStars" style="margin-bottom:6px;font-size:16px;min-height:20px;"></div>
+          <div class="player-avatar" onclick="document.getElementById('avatarUploadMain').click()" style="cursor:pointer;">
+            <div class="avatar-ring" id="avatarRing">⚔️</div>
+            <input type="file" id="avatarUploadMain" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)"/>
+          </div>
+          <div class="player-name" id="playerName">HUNTER</div>
+          <div class="player-title" id="playerTitle" onclick="openRankTitleModal()" style="cursor:pointer;" title="Click to customize">ARISE FROM THE SHADOW ✏️</div>
+          <div class="rank-badge" id="rankBadge">RANK E</div>
+          <div id="guildBadge" style="display:none;font-family:'Share Tech Mono';font-size:10px;color:var(--gold);margin-bottom:8px;"></div>
+          <div style="margin:6px 0;padding:8px;background:rgba(0,20,40,0.8);border:1px solid var(--border);">
+            <div style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:4px;">YOUR CODE</div>
+            <div style="display:flex;align-items:center;gap:6px;justify-content:center;">
+              <span style="font-family:'Orbitron';font-size:15px;font-weight:700;color:var(--accent);letter-spacing:3px;" id="playerCodeDisplay">------</span>
+              <button class="btn" onclick="copyPlayerCode()" style="padding:3px 8px;font-size:9px;border-color:var(--accent);color:var(--accent);">📋</button>
+            </div>
+          </div>
+          <div class="level-display" id="levelDisplay">1<span>LEVEL</span></div>
+          <div class="xp-section">
+            <div class="xp-label"><span>EXPERIENCE</span><span id="xpLabel">0 / 100 XP</span></div>
+            <div class="bar-track"><div class="bar-fill" id="xpBar" style="width:0%"></div></div>
+          </div>
+          <!-- Prestige Button (hidden until max level) -->
+          <button class="btn" id="prestigeBtn" onclick="doPrestige()" style="display:none;width:100%;margin-top:10px;border-color:var(--gold);color:var(--gold);background:rgba(255,215,0,0.05);">⭐ PRESTIGE NOW</button>
+          <!-- Daily Score -->
+          <div style="margin-top:10px;padding:8px;background:rgba(0,20,40,0.6);border:1px solid var(--border);">
+            <div style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);">TODAY'S SCORE</div>
+            <div style="font-family:'Orbitron';font-size:22px;font-weight:700;color:var(--accent);" id="dailyScore">0</div>
+            <div style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);">BEST: <span id="bestDayScore">0</span> | AVG: <span id="avgDayScore">0</span></div>
+          </div>
+          <!-- Combo Display -->
+          <div id="comboPanel" style="display:none;margin-top:10px;padding:8px;background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.3);">
+            <div style="font-family:'Share Tech Mono';font-size:9px;color:#ffaa00;">COMBO ACTIVE</div>
+            <div style="font-family:'Orbitron';font-size:20px;font-weight:700;color:#ffaa00;" id="comboCount">x1.0</div>
+            <div style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);">COMPLETE QUESTS TO INCREASE!</div>
+          </div>
+        </div>
+
+        <!-- Attributes -->
+        <div class="panel">
+          <div class="panel-title">ATTRIBUTES</div>
+          <div class="stats-grid" id="statsGrid">
+            <!-- Rendered by JS with goal indicators -->
+          </div>
+        </div>
+
+        <!-- Records -->
+        <div class="panel">
+          <div class="panel-title">RECORDS</div>
+          <div class="total-stats">
+            <div class="total-stat-card"><div class="total-stat-num" id="totalQuests">0</div><div class="total-stat-label">QUESTS</div></div>
+            <div class="total-stat-card"><div class="total-stat-num" id="totalXP">0</div><div class="total-stat-label">TOTAL XP</div></div>
+            <div class="total-stat-card"><div class="total-stat-num" id="totalDays">0</div><div class="total-stat-label">STREAK</div></div>
+          </div>
+        </div>
+
+        <!-- Shadow Army -->
+        <div class="panel">
+          <div class="panel-title">☠ SHADOW ARMY</div>
+          <div class="shadow-army-count"><div class="shadow-num" id="shadowCount">0</div><div class="shadow-label">SOLDIERS</div></div>
+          <div class="shadow-soldiers" id="shadowSoldiers"></div>
+          <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-top:8px;text-align:center;">1 SOLDIER PER 10 QUESTS</div>
+          <button class="btn" onclick="triggerShadowMarch()" style="width:100%;margin-top:10px;font-size:10px;border-color:var(--muted);color:var(--muted);">☠ MARCH ARMY</button>
+        </div>
+
+        <!-- Skill Tree -->
+        <div class="panel">
+          <div class="panel-title">SKILL TREE</div>
+          <div class="skill-list" id="skillList"></div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT -->
+      <div class="right-col">
+
+        <!-- Daily Challenge -->
+        <div class="panel daily-challenge-panel" id="dailyChallengePanel">
+          <div class="panel-title" style="color:#ffaa00;">⚡ DAILY CHALLENGE</div>
+          <div id="dailyChallengeContent"></div>
+        </div>
+
+        <!-- Seasonal Event -->
+        <div class="panel seasonal-panel" id="seasonalPanel" style="display:none;">
+          <div class="panel-title seasonal-title" id="seasonalPanelTitle">🎉 SEASONAL EVENT</div>
+          <div id="seasonalPanelContent"></div>
+        </div>
+
+        <!-- Boss Battle -->
+        <div class="panel boss-panel" id="bossPanel">
+          <div class="panel-title boss-title">👑 WEEKLY BOSS BATTLE</div>
+          <div class="boss-name" id="bossName">IRON GOLEM</div>
+          <div class="boss-desc" id="bossDesc">Complete 20 quests this week</div>
+          <div class="xp-label"><span>PROGRESS</span><span id="bossProgressLabel">0 / 20</span></div>
+          <div class="bar-track"><div class="bar-fill" id="bossBar" style="width:0%;background:linear-gradient(90deg,#ff6600,#ffd700)"></div></div>
+          <div style="font-family:'Share Tech Mono';font-size:11px;color:var(--gold);margin-top:6px;" id="bossRewardText">REWARD: +200 XP</div>
+        </div>
+
+        <!-- Shadow Extractions -->
+        <div class="panel" id="shadowExtractPanel" style="display:none;border-color:rgba(123,47,255,0.4);">
+          <div class="panel-title" style="color:var(--purple);">☠ SHADOW EXTRACTIONS</div>
+          <div style="font-family:'Share Tech Mono';font-size:10px;color:rgba(123,47,255,0.7);margin-bottom:10px;border-left:2px solid var(--purple);padding-left:8px;">DEFEAT THESE TO EARN BONUS XP</div>
+          <div class="quest-list" id="shadowExtractList"></div>
+        </div>
+
+        <!-- Mandatory Quests -->
+        <div class="panel mandatory-panel" id="mandatoryPanel" style="display:none;">
+          <div class="panel-title mandatory-title">⚡ DAILY MANDATORY QUESTS</div>
+          <div style="font-family:'Share Tech Mono';font-size:10px;color:rgba(255,170,0,0.7);margin-bottom:10px;border-left:2px solid #ffaa00;padding-left:8px;">MUST COMPLETE TODAY</div>
+          <div class="quest-list" id="mandatoryList"></div>
+        </div>
+
+        <!-- Add Quest -->
+        <div class="panel">
+          <div class="panel-title">DAILY QUESTS</div>
+          <div class="quest-input-row">
+            <input class="quest-input" type="text" id="questInput" placeholder="Enter your quest..."/>
+            <select class="quest-input" id="questType">
+              <option value="strength">💪 Strength</option>
+              <option value="intelligence">🧠 Intelligence</option>
+              <option value="agility">⚡ Agility</option>
+              <option value="vitality">❤️ Vitality</option>
+              <option value="perception">👁️ Perception</option>
+            </select>
+            <select class="quest-input" id="questDifficulty" style="max-width:110px;">
+              <option value="10">Easy +10</option>
+              <option value="20" selected>Medium +20</option>
+              <option value="40">Hard +40</option>
+            </select>
+            <button class="btn" onclick="addQuest()">+ ADD</button>
+          </div>
+          <div style="margin-bottom:10px;">
+            <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-bottom:6px;">TEMPLATES:</div>
+            <div id="templateBtns" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+            <button class="btn" onclick="saveAsTemplate()" style="margin-top:6px;font-size:9px;padding:4px 10px;border-color:var(--muted);color:var(--muted);">+ SAVE AS TEMPLATE</button>
+          </div>
+          <div class="quest-list" id="questList"><div class="empty-state">[ NO ACTIVE QUESTS ]</div></div>
+        </div>
+
+        <!-- Penalty Quests -->
+        <div class="panel penalty-quest-panel" id="penaltyQuestPanel" style="display:none;">
+          <div class="panel-title penalty-title">☠ PENALTY QUESTS</div>
+          <div class="penalty-quest-warning">FAILURE TO COMPLETE WILL RESULT IN FURTHER PUNISHMENT</div>
+          <div class="quest-list" id="penaltyQuestList"></div>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="panel">
+          <div class="panel-title">ACTIVITY LOG</div>
+          <div class="history-list" id="historyList"><div style="text-align:center;color:var(--muted);font-family:'Share Tech Mono';font-size:11px;padding:20px;">[ AWAITING FIRST ACTIVITY ]</div></div>
+        </div>
+
+        <!-- Radar -->
+        <div class="panel">
+          <div class="panel-title">STAT RADAR</div>
+          <div class="radar-wrapper">
+            <div class="radar-score-box">
+              <div class="radar-score-num" id="radarScore">1.00</div>
+              <div class="radar-score-label">POWER SCORE</div>
+            </div>
+            <canvas id="radarCanvas" width="260" height="260"></canvas>
+          </div>
+        </div>
+
+        <!-- Stat Distribution -->
+        <div class="panel">
+          <div class="panel-title">STAT DISTRIBUTION</div>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;" id="statBars"></div>
+        </div>
+
+        <!-- Calendar -->
+        <div class="panel">
+          <div class="panel-title">QUEST HISTORY</div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+          <div class="calendar-legend">
+            <span style="color:var(--muted);font-size:10px;font-family:'Share Tech Mono'">LESS</span>
+            <div class="cal-cell" style="width:12px;height:12px;background:rgba(0,170,255,0.1)"></div>
+            <div class="cal-cell" style="width:12px;height:12px;background:rgba(0,170,255,0.3)"></div>
+            <div class="cal-cell" style="width:12px;height:12px;background:rgba(0,170,255,0.6)"></div>
+            <div class="cal-cell" style="width:12px;height:12px;background:var(--glow)"></div>
+            <span style="color:var(--muted);font-size:10px;font-family:'Share Tech Mono'">MORE</span>
+          </div>
+        </div>
+
+        <!-- Weekly Report -->
+        <div class="panel">
+          <div class="panel-title">WEEKLY REPORT</div>
+          <div id="weeklyReportPreview" style="display:flex;flex-direction:column;gap:8px;"></div>
+          <button class="btn" onclick="showFullReport()" style="margin-top:12px;width:100%;font-size:11px;">📊 VIEW FULL REPORT</button>
+        </div>
+
+        <!-- Milestones -->
+        <div class="panel">
+          <div class="panel-title">🔥 STREAK MILESTONES</div>
+          <div class="milestone-list" id="milestoneList"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== DASHBOARD TAB ===== -->
+  <div class="tab-content" id="tab-dashboard">
+    <div class="grid">
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <div class="panel">
+          <div class="panel-title">📊 LIFE SUMMARY</div>
+          <div id="lifeSummaryContent"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">🎯 GOAL TRACKER</div>
+          <div id="goalTrackerContent"></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <div class="panel">
+          <div class="panel-title">📅 XP LEADERBOARD (WEEKLY)</div>
+          <div id="xpLeaderboardContent"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">⭐ PRESTIGE HISTORY</div>
+          <div id="prestigeHistoryContent"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== HABITS TAB ===== -->
+  <div class="tab-content" id="tab-habits">
+    <div class="panel">
+      <div class="panel-title">📋 HABIT TRACKER</div>
+      <div class="quest-input-row">
+        <input class="quest-input" id="habitInput" placeholder="New habit..."/>
+        <select class="quest-input" id="habitType" style="max-width:130px;">
+          <option value="strength">💪 Strength</option>
+          <option value="intelligence">🧠 Intelligence</option>
+          <option value="agility">⚡ Agility</option>
+          <option value="vitality">❤️ Vitality</option>
+          <option value="perception">👁️ Perception</option>
+        </select>
+        <button class="btn" onclick="addHabit()">+ ADD</button>
+      </div>
+      <div id="habitTrackerGrid"></div>
+    </div>
+  </div>
+
+  <!-- ===== CHAINS TAB ===== -->
+  <div class="tab-content" id="tab-chains">
+    <div class="panel">
+      <div class="panel-title">🔗 QUEST CHAINS</div>
+      <button class="btn" onclick="openChainModal()" style="margin-bottom:16px;">+ CREATE CHAIN</button>
+      <div id="chainsList"></div>
+    </div>
+  </div>
+
+  <!-- ===== GEAR TAB ===== -->
+  <div class="tab-content" id="tab-gear">
+    <div class="grid">
+      <div class="panel">
+        <div class="panel-title">🛡️ EQUIPPED GEAR</div>
+        <div id="equippedGear"></div>
+        <div style="font-family:'Share Tech Mono';font-size:11px;color:var(--gold);margin-top:12px;">BONUS: <span id="gearBonus">+0</span></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">🎒 INVENTORY</div>
+        <div id="gearInventory"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== STATS TAB ===== -->
+  <div class="tab-content" id="tab-stats">
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-title">📈 STAT EVOLUTION — 30 DAYS</div>
+      <canvas id="evolutionChart" width="900" height="300" style="max-width:100%;"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-title">📅 DAILY SCORE HISTORY</div>
+      <canvas id="dailyScoreChart" width="900" height="200" style="max-width:100%;"></canvas>
+    </div>
+  </div>
+
+  <!-- ===== BADGES TAB ===== -->
+  <div class="tab-content" id="tab-badges">
+    <div class="panel">
+      <div class="panel-title">🏆 ACHIEVEMENT BADGES</div>
+      <div id="badgeGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px;margin-top:8px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<canvas id="exportCanvas" style="display:none;"></canvas>
 <script src="app.js"></script>
 </body>
 </html>

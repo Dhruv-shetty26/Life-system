@@ -334,8 +334,11 @@
     <button class="tab-btn" onclick="switchTab('habits',this)">📋 HABITS</button>
     <button class="tab-btn" onclick="switchTab('chains',this)">🔗 CHAINS</button>
     <button class="tab-btn" onclick="switchTab('gear',this)">🛡️ GEAR</button>
+    <button class="tab-btn" onclick="switchTab('shop',this)" style="border-color:var(--gold);color:var(--gold);">🏪 SHOP</button>
     <button class="tab-btn" onclick="switchTab('stats',this)">📈 STATS</button>
     <button class="tab-btn" onclick="switchTab('badges',this)">🏆 BADGES</button>
+    <button class="tab-btn" onclick="window.open('game.html','_blank')" style="border-color:var(--purple);color:var(--purple);">🎮 DUNGEON</button>
+    <button class="btn" onclick="startTutorial()" style="padding:8px 14px;font-size:10px;border-color:var(--success);color:var(--success);background:rgba(0,255,136,0.05);">❓ TUTORIAL</button>
   </div>
 
   <!-- ===== MAIN TAB ===== -->
@@ -400,6 +403,10 @@
             <div class="total-stat-card"><div class="total-stat-num" id="totalQuests">0</div><div class="total-stat-label">QUESTS</div></div>
             <div class="total-stat-card"><div class="total-stat-num" id="totalXP">0</div><div class="total-stat-label">TOTAL XP</div></div>
             <div class="total-stat-card"><div class="total-stat-num" id="totalDays">0</div><div class="total-stat-label">STREAK</div></div>
+          </div>
+          <div style="margin-top:8px;padding:10px;background:rgba(255,215,0,0.05);border:1px solid rgba(255,215,0,0.2);text-align:center;">
+            <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);">SHADOW CRYSTALS</div>
+            <div style="font-family:'Orbitron';font-size:22px;font-weight:700;color:var(--gold);" id="totalCrystals">💎0</div>
           </div>
         </div>
 
@@ -637,6 +644,202 @@
     </div>
   </div>
 
+  <!-- ===== SHOP TAB ===== -->
+  <div class="tab-content" id="tab-shop">
+    <div class="grid">
+      <!-- LEFT: Currency + Sell -->
+      <div style="display:flex;flex-direction:column;gap:20px;">
+        <div class="panel" style="border-color:rgba(255,215,0,0.4);">
+          <div class="panel-title" style="color:var(--gold);">💎 SHADOW CRYSTALS</div>
+          <div style="text-align:center;padding:10px 0;">
+            <div style="font-size:40px;margin-bottom:6px;">💎</div>
+            <div style="font-family:'Orbitron';font-size:36px;font-weight:900;color:var(--gold);text-shadow:0 0 15px rgba(255,215,0,0.5);" id="shopCrystals">0</div>
+            <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-top:4px;">SHADOW CRYSTALS</div>
+          </div>
+          <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);text-align:center;margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+            EARN CRYSTALS BY COMPLETING QUESTS<br>AND CLEARING DUNGEONS
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">🗑️ SELL GEAR</div>
+          <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-bottom:12px;">CLICK GEAR TO SELL FOR CRYSTALS</div>
+          <div id="sellGearList"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Shop Items -->
+      <div class="panel" style="border-color:rgba(255,215,0,0.3);">
+        <div class="panel-title" style="color:var(--gold);">🏪 SHADOW BLACKSMITH</div>
+        <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);margin-bottom:16px;border-left:2px solid var(--gold);padding-left:8px;">
+          SPEND SHADOW CRYSTALS TO UNLOCK POWERFUL GEAR
+        </div>
+        <!-- Filter -->
+        <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+          <button class="btn shop-filter active" onclick="filterShop('all',this)" style="font-size:10px;padding:5px 12px;">ALL</button>
+          <button class="btn shop-filter" onclick="filterShop('common',this)" style="font-size:10px;padding:5px 12px;border-color:#aaa;color:#aaa;">COMMON</button>
+          <button class="btn shop-filter" onclick="filterShop('rare',this)" style="font-size:10px;padding:5px 12px;border-color:#60c0ff;color:#60c0ff;">RARE</button>
+          <button class="btn shop-filter" onclick="filterShop('epic',this)" style="font-size:10px;padding:5px 12px;border-color:var(--purple);color:var(--purple);">EPIC</button>
+          <button class="btn shop-filter" onclick="filterShop('legendary',this)" style="font-size:10px;padding:5px 12px;border-color:var(--gold);color:var(--gold);">LEGENDARY</button>
+        </div>
+        <div id="shopItemsList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== GAME TAB ===== -->
+  <div class="tab-content" id="tab-game">
+    <div class="panel" style="border-color:rgba(123,47,255,0.4);">
+      <div class="panel-title" style="color:var(--purple);">⚔ SHADOW DUNGEON — ARISE</div>
+
+      <!-- Game HUD row -->
+      <div class="game-hud-row">
+        <div class="game-hud-item">
+          <div class="game-hud-label">FLOOR</div>
+          <div class="game-hud-val" id="gameWave" style="color:var(--gold);">1</div>
+        </div>
+        <div class="game-hud-item">
+          <div class="game-hud-label">SCORE</div>
+          <div class="game-hud-val" id="gameScore" style="color:var(--accent);">0</div>
+        </div>
+        <div class="game-hud-item">
+          <div class="game-hud-label">KILLS</div>
+          <div class="game-hud-val" id="gameKills" style="color:var(--success);">0</div>
+        </div>
+        <div class="game-hud-item">
+          <div class="game-hud-label">CRYSTALS</div>
+          <div class="game-hud-val" id="gameCrystals" style="color:#88eeff;">💎0</div>
+        </div>
+        <div class="game-hud-item">
+          <div class="game-hud-label">BEST</div>
+          <div class="game-hud-val" id="gameBest" style="color:var(--success);">0</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+          <button class="btn" onclick="startGame()" id="gameStartBtn" style="border-color:var(--purple);color:var(--purple);font-size:11px;">▶ START</button>
+          <button class="btn btn-danger" onclick="stopGame()" id="gameStopBtn" style="display:none;font-size:11px;">■ STOP</button>
+        </div>
+      </div>
+
+      <!-- HP + Skills row -->
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--danger);margin-bottom:3px;">❤ HUNTER HP</div>
+          <div class="bar-track" style="height:12px;">
+            <div id="gameHpBar" style="height:100%;width:100%;background:linear-gradient(90deg,#ff3366,#ff6688);transition:width 0.2s;"></div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:200px;">
+          <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--purple);margin-bottom:3px;">⚡ MANA (SHADOW SKILLS)</div>
+          <div class="bar-track" style="height:12px;">
+            <div id="gameManaBar" style="height:100%;width:100%;background:linear-gradient(90deg,var(--purple),#cc00ff);transition:width 0.2s;"></div>
+          </div>
+        </div>
+        <!-- Skill buttons -->
+        <div style="display:flex;gap:6px;">
+          <div class="skill-hotkey" id="skill1Btn" onclick="useSkill(1)" title="[Q] Shadow Strike — Heavy slash">
+            <div style="font-size:16px;">⚡</div>
+            <div style="font-family:'Share Tech Mono';font-size:8px;">Q</div>
+          </div>
+          <div class="skill-hotkey" id="skill2Btn" onclick="useSkill(2)" title="[E] Arise — Extract nearby dead enemy">
+            <div style="font-size:16px;">☠</div>
+            <div style="font-family:'Share Tech Mono';font-size:8px;">E</div>
+          </div>
+          <div class="skill-hotkey" id="skill3Btn" onclick="useSkill(3)" title="[R] Shadow Shield — Brief invincibility">
+            <div style="font-size:16px;">🛡</div>
+            <div style="font-family:'Share Tech Mono';font-size:8px;">R</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Game Canvas -->
+      <div style="position:relative;border:2px solid rgba(123,47,255,0.5);border-radius:4px;overflow:hidden;" id="gameWrapper">
+        <canvas id="gameCanvas" width="900" height="420" style="display:block;max-width:100%;image-rendering:pixelated;"></canvas>
+
+        <!-- Start Screen -->
+        <div id="gameStartScreen" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,0,16,0.95);">
+          <div style="font-family:'Orbitron';font-size:10px;letter-spacing:4px;color:var(--purple);margin-bottom:8px;animation:pulse 2s infinite;">◈ SYSTEM INITIALIZED ◈</div>
+          <div style="font-size:50px;margin-bottom:8px;">⚔️</div>
+          <div style="font-family:'Orbitron';font-size:32px;font-weight:900;color:#fff;text-shadow:0 0 30px var(--purple);margin-bottom:4px;">SHADOW DUNGEON</div>
+          <div style="font-family:'Orbitron';font-size:14px;color:var(--gold);margin-bottom:16px;">ARISE FROM THE SHADOW</div>
+          <div style="background:rgba(0,0,20,0.8);border:1px solid var(--border);padding:14px 24px;margin-bottom:20px;font-family:'Share Tech Mono';font-size:11px;color:var(--muted);line-height:2;text-align:left;max-width:420px;">
+            <div style="color:var(--glow);margin-bottom:6px;font-family:'Orbitron';font-size:10px;">◈ CONTROLS</div>
+            <div>⬅➡ or A/D &nbsp;·&nbsp; <span style="color:var(--text);">MOVE LEFT / RIGHT</span></div>
+            <div>⬆ or W / SPACE &nbsp;·&nbsp; <span style="color:var(--text);">JUMP</span></div>
+            <div>J or Z or TAP &nbsp;·&nbsp; <span style="color:var(--text);">NORMAL ATTACK</span></div>
+            <div>Q &nbsp;·&nbsp; <span style="color:var(--gold);">SHADOW STRIKE (heavy)</span></div>
+            <div>E &nbsp;·&nbsp; <span style="color:var(--purple);">ARISE (extract shadow)</span></div>
+            <div>R &nbsp;·&nbsp; <span style="color:var(--accent);">SHADOW SHIELD</span></div>
+          </div>
+          <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--success);margin-bottom:16px;">CLEAR FLOORS → EARN SHADOW CRYSTALS → BUY GEAR IN SHOP</div>
+          <button class="btn" onclick="startGame()" style="border-color:var(--purple);color:var(--purple);font-size:14px;padding:14px 36px;background:rgba(123,47,255,0.15);">⚔ ENTER DUNGEON</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" style="position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(20,0,5,0.96);">
+          <div style="font-family:'Orbitron';font-size:42px;font-weight:900;color:var(--danger);text-shadow:0 0 30px var(--danger);margin-bottom:6px;">DEFEATED</div>
+          <div style="font-family:'Share Tech Mono';font-size:11px;color:var(--muted);margin-bottom:16px;">THE DUNGEON CLAIMS ANOTHER HUNTER</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;min-width:280px;">
+            <div style="background:rgba(0,20,40,0.6);border:1px solid var(--border);padding:12px;text-align:center;">
+              <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);">FLOOR REACHED</div>
+              <div style="font-family:'Orbitron';font-size:26px;color:var(--gold);" id="gameOverWave">1</div>
+            </div>
+            <div style="background:rgba(0,20,40,0.6);border:1px solid var(--border);padding:12px;text-align:center;">
+              <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);">KILLS</div>
+              <div style="font-family:'Orbitron';font-size:26px;color:var(--accent);" id="gameOverKills">0</div>
+            </div>
+            <div style="background:rgba(0,20,40,0.6);border:1px solid var(--border);padding:12px;text-align:center;">
+              <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);">SCORE</div>
+              <div style="font-family:'Orbitron';font-size:26px;color:var(--accent);" id="gameOverScore">0</div>
+            </div>
+            <div style="background:rgba(0,20,40,0.6);border:1px solid var(--border);padding:12px;text-align:center;">
+              <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);">CRYSTALS</div>
+              <div style="font-family:'Orbitron';font-size:26px;color:var(--gold);" id="gameOverCrystals">💎0</div>
+            </div>
+          </div>
+          <div style="font-family:'Orbitron';font-size:14px;color:var(--success);margin-bottom:20px;" id="gameXPEarned">+0 XP EARNED</div>
+          <div style="display:flex;gap:10px;">
+            <button class="btn" onclick="startGame()" style="border-color:var(--purple);color:var(--purple);">↺ TRY AGAIN</button>
+            <button class="btn" onclick="switchTab('shop',document.querySelectorAll('.tab-btn')[5])" style="border-color:var(--gold);color:var(--gold);">🏪 VISIT SHOP</button>
+          </div>
+        </div>
+
+        <!-- Pause / In-game tutorial overlay -->
+        <div id="gameTutorialOverlay" style="position:absolute;top:10px;left:10px;background:rgba(0,0,20,0.85);border:1px solid var(--glow);padding:10px 14px;font-family:'Share Tech Mono';font-size:10px;color:var(--muted);pointer-events:none;display:none;max-width:200px;line-height:1.8;">
+          <div style="color:var(--glow);font-family:'Orbitron';font-size:9px;margin-bottom:4px;">HOW TO PLAY</div>
+          <div>A/D — Move</div>
+          <div>W/Space — Jump</div>
+          <div>J/Z — Attack</div>
+          <div>Q — Shadow Strike</div>
+          <div>E — ARISE!</div>
+          <div>R — Shield</div>
+        </div>
+      </div>
+
+      <!-- Bottom tips -->
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+        <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);padding:4px 10px;border:1px solid var(--border);">💎 CRYSTALS DROP FROM ENEMIES</div>
+        <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);padding:4px 10px;border:1px solid var(--border);">⚡ USE SKILLS FOR BONUS DAMAGE</div>
+        <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);padding:4px 10px;border:1px solid var(--border);">☠ ARISE EXTRACTS FALLEN ENEMIES</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ===== TUTORIAL OVERLAY ===== -->
+<div id="tutorialOverlay" style="display:none;position:fixed;inset:0;z-index:2000;pointer-events:none;">
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,0.75);pointer-events:all;" onclick="nextTutorial()"></div>
+  <div id="tutorialCard" style="position:absolute;pointer-events:all;background:var(--panel);border:1px solid var(--glow);box-shadow:0 0 30px rgba(0,170,255,0.4);padding:20px 24px;max-width:320px;width:90%;border-radius:4px;z-index:2001;">
+    <div style="font-family:'Share Tech Mono';font-size:10px;color:var(--glow);letter-spacing:2px;margin-bottom:8px;" id="tutorialStep">STEP 1 / 9</div>
+    <div style="font-size:28px;margin-bottom:8px;" id="tutorialIcon">⚔️</div>
+    <div style="font-family:'Orbitron';font-size:14px;color:#fff;margin-bottom:8px;letter-spacing:1px;" id="tutorialTitle">WELCOME HUNTER</div>
+    <div style="font-family:'Share Tech Mono';font-size:11px;color:var(--muted);line-height:1.6;" id="tutorialDesc"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-danger" onclick="skipTutorial()" style="font-size:10px;padding:6px 12px;">SKIP</button>
+      <button class="btn" onclick="nextTutorial()" style="flex:1;border-color:var(--glow);color:var(--glow);" id="tutorialNextBtn">NEXT →</button>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:4px;justify-content:center;" id="tutorialDots"></div>
+  </div>
 </div>
 
 <canvas id="exportCanvas" style="display:none;"></canvas>

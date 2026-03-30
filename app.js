@@ -188,8 +188,9 @@ function playSound(type){
 
 function toggleSound(){
   state.soundOn=!state.soundOn;
-  document.getElementById('soundBtn').textContent=(state.soundOn?'🔊 SOUND ON':'🔇 SOUND OFF');
+  updateSidebarInfo();
   save();
+  notify(state.soundOn ? '🔊 SOUND ON' : '🔇 SOUND OFF');
 }
 
 function save(){localStorage.setItem('liferpg',JSON.stringify(state));}
@@ -216,19 +217,31 @@ function notify(msg,type){
 }
 
 function switchTab(name,btn){
-  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('tab-'+name).classList.add('active');
-  btn.classList.add('active');
-  if(name==='stats') renderEvolutionChart();
-  if(name==='badges') renderBadges();
-  if(name==='gear') renderGear();
-  if(name==='habits') renderHabits();
-  if(name==='chains') renderChains();
-  if(name==='dashboard') renderDashboard();
-  if(name==='shop'){initShop();renderShop();}
-  if(name==='game'){const b=parseInt(localStorage.getItem('dungeon_best')||'0');document.getElementById('gameBest').textContent=b;}
+  // Legacy support — now we scroll to sections
+  const map={
+    main:'sec-hunter',dashboard:'sec-progress',habits:'sec-habits',
+    chains:'sec-quests',gear:'sec-gear',shop:'sec-shop',
+    stats:'sec-stats',badges:'sec-progress'
+  };
+  const target=document.getElementById(map[name]||'sec-hunter');
+  if(target) target.scrollIntoView({behavior:'smooth'});
 }
+
+// Section nav highlight on scroll + re-render charts when visible
+window.addEventListener('scroll',()=>{
+  const sections=['sec-hunter','sec-quests','sec-stats','sec-army','sec-gear','sec-progress','sec-habits','sec-shop'];
+  let current='sec-hunter';
+  sections.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&el.getBoundingClientRect().top<=120) current=id;
+  });
+  document.querySelectorAll('.sec-btn').forEach(btn=>{
+    const href=btn.getAttribute('href')||'';
+    btn.classList.toggle('active',href==='#'+current);
+  });
+  // Re-render charts when stats section is in view
+  if(current==='sec-stats') renderEvolutionChart();
+});
 
 // ====== HUNTER NAME ======
 function setHunterName(){
@@ -263,11 +276,12 @@ function updateAvatarDisplay(){
 }
 
 // ====== THEME ======
-function toggleTheme(){state.theme=state.theme==='normal'?'arise':'normal';applyTheme();save();}
+function toggleTheme(){state.theme=state.theme==='normal'?'arise':'normal';applyTheme();save();updateSidebarInfo();}
 function applyTheme(){
   const arise=state.theme==='arise';
   document.body.classList.toggle('arise-mode',arise);
-  document.getElementById('themeBtn').textContent=arise?'☀ NORMAL MODE':'🌑 ARISE MODE';
+  // Update sidebar theme badge
+  updateSidebarInfo();
   document.querySelectorAll('.particle').forEach(p=>p.style.background=arise?'#cc00ff':'#00aaff');
 }
 
@@ -441,6 +455,7 @@ function updateRankBgEffect(){
 // ====== LEVEL UP ======
 function checkLevelUp(){
   while(state.xp>=state.xpNeeded){
+    const oldLevel = state.level;
     state.xp-=state.xpNeeded;state.level++;
     state.xpNeeded=Math.floor(state.xpNeeded*1.4);
     document.getElementById('levelupNewLevel').textContent='LEVEL '+state.level;
@@ -450,6 +465,7 @@ function checkLevelUp(){
     setTimeout(()=>document.getElementById('levelupOverlay').classList.remove('active'),2800);
     checkRankCeremony();
     updateRankBgEffect();
+    checkWisdomUnlock(oldLevel, state.level);
     // Show prestige button
     if(state.level>=MAX_LEVEL) document.getElementById('prestigeBtn').style.display='block';
   }
@@ -611,7 +627,9 @@ function completeQuest(id){
   updateStreakAndHistory(q.name,xp,q.type);updateWeeklyProgress();
   updateCombo();updateDailyScore(xp);
   checkGearDrop(q.type);checkLevelUp();checkSkills();checkMilestones();checkBadges();updateChainProgress(q.name);
-  playSound('complete');save();renderAll();
+  // Show dramatic quest complete animation
+  showQuestComplete(q.name, xp, q.type, totalMult);
+  save();renderAll();
   let msg='✅ +'+xp+' XP';
   if(totalMult>1) msg+=' ('+totalMult.toFixed(1)+'x BONUS!)';
   notify(msg);
@@ -883,28 +901,168 @@ function startPvP(){
 function addHabit(){
   const name=document.getElementById('habitInput').value.trim();
   const type=document.getElementById('habitType').value;
-  if(!name) return;
+  const diff=document.getElementById('habitDifficulty')?.value||'easy';
+  if(!name){notify('Enter a habit name!');return;}
   if(!state.habits) state.habits=[];
-  state.habits.push({id:Date.now(),name,type});
-  document.getElementById('habitInput').value='';save();renderHabits();
+  state.habits.push({id:Date.now(),name,type,diff});
+  document.getElementById('habitInput').value='';
+  save();renderHabits();
+  notify('📋 HABIT ADDED: '+name.toUpperCase());
 }
+
 function toggleHabitDay(habitId,day){
   if(!state.habitLogs) state.habitLogs={};
-  const key=habitId+'_'+day;state.habitLogs[key]=!state.habitLogs[key];
-  if(state.habitLogs[key]){state.xp+=5;state.totalXP+=5;logActivity('📋 HABIT: '+(state.habits||[]).find(h=>h.id===habitId)?.name,'+5 XP','vitality');}
-  save();renderHabits();
+  const key=habitId+'_'+day;
+  const wasOn=state.habitLogs[key];
+  state.habitLogs[key]=!wasOn;
+  const habit=(state.habits||[]).find(h=>h.id===habitId);
+  if(!habit) return;
+  // XP based on difficulty
+  const XP_MAP={easy:5,medium:10,hard:20};
+  const xp=XP_MAP[habit.diff||'easy'];
+  if(!wasOn){
+    // Ticking ON — give XP + stat
+    state.xp+=xp; state.totalXP+=xp;
+    state.stats[habit.type]=Math.min(99,(parseInt(state.stats[habit.type])||1)+1);
+    logActivity('📋 HABIT: '+habit.name,'+'+xp+' XP',habit.type);
+    checkLevelUp(); checkSkills();
+    // Streak milestone notifications
+    const streak=getHabitStreak(habitId);
+    if(streak>0&&streak%7===0) notify('🔥 '+habit.name+' — '+streak+' DAY STREAK!','levelup');
+  } else {
+    // Unticking — take back XP
+    state.xp=Math.max(0,state.xp-xp);
+    state.totalXP=Math.max(0,state.totalXP-xp);
+    state.stats[habit.type]=Math.max(1,(parseInt(state.stats[habit.type])||1)-1);
+  }
+  save();renderHabits();renderPlayer();renderStatsGrid();
 }
+
+function getHabitStreak(habitId){
+  // Count consecutive days from today backwards in current month
+  const today=new Date().getDate();
+  let streak=0;
+  for(let d=today;d>=1;d--){
+    const k=habitId+'_'+d;
+    if(state.habitLogs&&state.habitLogs[k]) streak++;
+    else break;
+  }
+  return streak;
+}
+
+function getWeeklyHabitScore(){
+  if(!state.habits||!state.habits.length) return {score:0,done:0,total:0};
+  const today=new Date();
+  // Get day of week (0=Sun), find start of this week (Mon)
+  const dow=today.getDay()===0?6:today.getDay()-1;
+  const todayDate=today.getDate();
+  const weekDays=[];
+  for(let i=dow;i>=0;i--) weekDays.push(todayDate-i);
+  let done=0,total=state.habits.length*weekDays.length;
+  state.habits.forEach(h=>{
+    weekDays.forEach(d=>{
+      if(state.habitLogs&&state.habitLogs[h.id+'_'+d]) done++;
+    });
+  });
+  const score=total>0?Math.round((done/total)*100):0;
+  return {score,done,total};
+}
+
+function deleteHabit(habitId){
+  state.habits=(state.habits||[]).filter(h=>h.id!==habitId);
+  // Clean up logs for this habit
+  Object.keys(state.habitLogs||{}).forEach(k=>{
+    if(k.startsWith(habitId+'_')) delete state.habitLogs[k];
+  });
+  save();renderHabits();
+  notify('🗑 HABIT REMOVED');
+}
+
 function renderHabits(){
   const el=document.getElementById('habitTrackerGrid');if(!el) return;
-  if(!state.habits||!state.habits.length){el.innerHTML='<div class="empty-state">[ NO HABITS YET ]</div>';return;}
-  const days=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
-  el.innerHTML=state.habits.map(h=>{
-    const count=Object.keys(state.habitLogs||{}).filter(k=>k.startsWith(h.id+'_')&&state.habitLogs[k]).length;
-    return `<div class="habit-tracker-row">
-      <div class="habit-name"><span>${TYPE_ICONS[h.type]} ${h.name}</span><span style="font-family:'Share Tech Mono';font-size:10px;color:var(--success)">${count}/${days}</span></div>
-      <div class="habit-days">${Array.from({length:days},(_,i)=>{const k=h.id+'_'+(i+1),done=state.habitLogs&&state.habitLogs[k];return `<div class="habit-day ${done?'done':''}" onclick="toggleHabitDay(${h.id},${i+1})">${done?'✓':i+1}</div>`;}).join('')}</div>
+
+  if(!state.habits||!state.habits.length){
+    el.innerHTML=`
+      <div class="empty-state" style="padding:20px;">[ NO HABITS YET — ADD ONE ABOVE ]</div>`;
+    return;
+  }
+
+  const today=new Date();
+  const daysInMonth=new Date(today.getFullYear(),today.getMonth()+1,0).getDate();
+  const todayDate=today.getDate();
+  const DIFF_XP={easy:5,medium:10,hard:20};
+  const DIFF_COL={easy:'var(--success)',medium:'#ffaa00',hard:'var(--danger)'};
+
+  // ── Weekly Score Banner ──
+  const {score,done,total}=getWeeklyHabitScore();
+  const scoreColor=score>=80?'var(--success)':score>=50?'#ffaa00':'var(--danger)';
+  const weeklyBanner=`
+    <div style="background:rgba(0,15,35,0.8);border:1px solid var(--border);border-radius:4px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:16px;">
+      <div style="flex:1;">
+        <div style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px;">THIS WEEK'S HABIT SCORE</div>
+        <div style="background:rgba(0,30,70,0.8);border:1px solid var(--border);height:8px;border-radius:4px;overflow:hidden;">
+          <div style="width:${score}%;height:100%;background:${scoreColor};border-radius:4px;transition:width 0.5s ease;box-shadow:0 0 6px ${scoreColor};"></div>
+        </div>
+        <div style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);margin-top:4px;">${done} / ${total} habits completed this week</div>
+      </div>
+      <div style="text-align:center;flex-shrink:0;">
+        <div style="font-family:'Orbitron';font-size:30px;font-weight:900;color:${scoreColor};text-shadow:0 0 12px ${scoreColor};">${score}%</div>
+        <div style="font-family:'Share Tech Mono';font-size:8px;color:var(--muted);">${score>=80?'EXCELLENT 🔥':score>=50?'GOOD ⚡':'NEEDS WORK ⚠'}</div>
+      </div>
     </div>`;
+
+  // ── Habit Rows ──
+  const LIMIT=4;
+  const visible=_slice(state.habits,'habits',LIMIT);
+
+  const rows=visible.map(h=>{
+    const diff=h.diff||'easy';
+    const xp=DIFF_XP[diff];
+    const col=DIFF_COL[diff];
+    const streak=getHabitStreak(h.id);
+    const count=Object.keys(state.habitLogs||{}).filter(k=>k.startsWith(h.id+'_')&&state.habitLogs[k]).length;
+
+    const days=Array.from({length:daysInMonth},(_,i)=>{
+      const d=i+1;
+      const k=h.id+'_'+d;
+      const done2=state.habitLogs&&state.habitLogs[k];
+      const isToday=d===todayDate;
+      const isFuture=d>todayDate;
+      return `<div class="habit-day ${done2?'done':''} ${isToday?'today':''} ${isFuture?'future':''}"
+        onclick="${isFuture?'':('toggleHabitDay('+h.id+','+d+')')}"
+        title="Day ${d}${done2?' ✓':''}"
+        style="${isToday?'border-color:var(--glow);':''} ${isFuture?'opacity:0.25;cursor:default;':''}">
+        ${done2?'✓':d}
+      </div>`;
+    }).join('');
+
+    return `
+      <div class="habit-tracker-row" style="border-left-color:${col};">
+        <div class="habit-name">
+          <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+            <span style="font-size:16px;">${TYPE_ICONS[h.type]}</span>
+            <div style="min-width:0;">
+              <div style="font-family:'Orbitron';font-size:12px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.name}</div>
+              <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
+                <span style="font-family:'Share Tech Mono';font-size:8px;color:${col};background:rgba(0,20,40,0.6);border:1px solid ${col};padding:1px 5px;border-radius:2px;text-transform:uppercase;">${diff} +${xp}xp</span>
+                <span style="font-family:'Share Tech Mono';font-size:9px;color:var(--success);">${count}/${daysInMonth} days</span>
+                ${streak>0?`<span style="font-family:'Share Tech Mono';font-size:9px;color:#ff8800;">🔥${streak} streak</span>`:''}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <div style="text-align:center;">
+              <div style="font-family:'Orbitron';font-size:18px;font-weight:900;color:${streak>0?'#ff8800':'var(--muted)'};">${streak}</div>
+              <div style="font-family:'Share Tech Mono';font-size:7px;color:var(--muted);">STREAK</div>
+            </div>
+            <button onclick="deleteHabit(${h.id})" style="font-family:'Share Tech Mono';font-size:9px;padding:3px 7px;background:transparent;border:1px solid rgba(255,51,102,0.3);color:rgba(255,51,102,0.5);cursor:pointer;border-radius:2px;" title="Delete habit">✕</button>
+          </div>
+        </div>
+        <div class="habit-days">${days}</div>
+      </div>`;
   }).join('');
+
+  el.innerHTML=weeklyBanner+rows+seeMoreBtn('habits',state.habits.length,LIMIT);
 }
 
 // ====== CHAINS ======
@@ -938,7 +1096,9 @@ function updateChainProgress(questName){
 function renderChains(){
   const el=document.getElementById('chainsList');if(!el) return;
   if(!state.chains||!state.chains.length){el.innerHTML='<div class="empty-state">[ NO CHAINS YET ]</div>';return;}
-  el.innerHTML=state.chains.map(chain=>{
+  const LIMIT=3;
+  const visible=_slice(state.chains,'chains',LIMIT);
+  el.innerHTML=visible.map(chain=>{
     const done=chain.steps.filter(s=>s.done).length,total=chain.steps.length,pct=Math.round((done/total)*100);
     return `<div class="chain-card">
       <div class="chain-title"><span>🔗 ${chain.name}</span><span style="font-family:'Share Tech Mono';font-size:10px;color:var(--success)">${done}/${total} · +${chain.bonus} BONUS</span></div>
@@ -948,7 +1108,7 @@ function renderChains(){
         ${!step.done?`<button class="btn btn-success" onclick="completeChainStep(${chain.id},${step.id})" style="font-size:9px;padding:3px 8px;">✓</button>`:'<span style="color:var(--success);font-size:10px;">✓</span>'}
       </div>`).join('')}
     </div>`;
-  }).join('');
+  }).join('') + seeMoreBtn('chains', state.chains.length, 3);
 }
 
 // ====== WEEKLY REPORT ======
@@ -970,60 +1130,57 @@ function closeReport(){document.getElementById('reportOverlay').classList.remove
 
 // ====== RENDER: DASHBOARD ======
 function renderDashboard(){
-  // Life Summary
   const startDate=new Date(state.startDate||Date.now());
   const daysActive=Math.floor((Date.now()-startDate)/86400000)+1;
   const avgQpD=daysActive>0?(state.totalQuests/daysActive).toFixed(1):0;
   const scores=Object.values(state.dailyScores||{});
   const bestDay=scores.length?Math.max(...scores):0;
-  const worstDay=scores.length?Math.min(...scores):0;
   const s=state.stats;
   const best=Object.entries(s).sort((a,b)=>b[1]-a[1])[0];
   const worst=Object.entries(s).sort((a,b)=>a[1]-b[1])[0];
-  document.getElementById('lifeSummaryContent').innerHTML=`
-    <div class="summary-row"><span class="summary-label">DAYS ACTIVE</span><span class="summary-value">${daysActive}</span></div>
-    <div class="summary-row"><span class="summary-label">AVG QUESTS/DAY</span><span class="summary-value">${avgQpD}</span></div>
-    <div class="summary-row"><span class="summary-label">BEST DAY SCORE</span><span class="summary-value">${bestDay} XP</span></div>
-    <div class="summary-row"><span class="summary-label">WORST DAY SCORE</span><span class="summary-value">${worstDay} XP</span></div>
-    <div class="summary-row"><span class="summary-label">STRONGEST STAT</span><span class="summary-value">${TYPE_ICONS[best[0]]} ${best[0].toUpperCase()} (${best[1]})</span></div>
-    <div class="summary-row"><span class="summary-label">WEAKEST STAT</span><span class="summary-value"style="color:var(--danger);">${TYPE_ICONS[worst[0]]} ${worst[0].toUpperCase()} (${worst[1]})</span></div>
-    <div class="summary-row"><span class="summary-label">PRESTIGE LEVEL</span><span class="summary-value">${state.prestige>0?'⭐ '+toRoman(state.prestige):'NONE'}</span></div>
-    <div class="summary-row"><span class="summary-label">MAX COMBO</span><span class="summary-value">${state.maxCombo||0}x 🔥</span></div>`;
 
-  // Goals
-  const goals=state.goals||{};
-  const goalKeys=Object.keys(goals);
-  document.getElementById('goalTrackerContent').innerHTML=goalKeys.length===0?'<div class="empty-state" style="padding:16px;">[ SET GOALS BY CLICKING EACH STAT ]</div>':goalKeys.map(stat=>{
-    const g=goals[stat];const current=state.stats[stat];
-    const pct=Math.min(100,Math.round((current/g.target)*100));
-    const deadline=new Date(g.date);const today=new Date();
-    const daysLeft=Math.ceil((deadline-today)/(1000*60*60*24));
-    const needed=Math.ceil((g.target-current)/Math.max(1,daysLeft));
-    const behind=daysLeft>0&&needed>2;
-    return `<div class="goal-card">
-      <div class="goal-stat-name"><span>${TYPE_ICONS[stat]} ${stat.toUpperCase()} → ${g.target}</span><span style="color:${behind?'var(--danger)':'var(--muted)'};">${daysLeft}d left</span></div>
-      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;${behind?'background:var(--danger);':''}"></div></div>
-      <div class="goal-progress-text">${current}/${g.target} (${pct}%) · Need ${needed}/day · ${behind?'⚠ FALLING BEHIND!':'On track ✓'}</div>
-    </div>`;
-  }).join('');
+  // Weekly report preview (used in sec-progress)
+  renderWeeklyPreview();
 
-  // XP Leaderboard
-  const history=state.weeklyXPHistory||[];
-  const currentWeek={week:'THIS WEEK',xp:state.weeklyXP||0,quests:state.weeklyQuests||0};
-  const all=[currentWeek,...history].sort((a,b)=>b.xp-a.xp);
-  const lastWeekXP=history.length>0?history[0].xp:0;
-  const change=currentWeek.xp>0&&lastWeekXP>0?Math.round(((currentWeek.xp-lastWeekXP)/lastWeekXP)*100):0;
-  document.getElementById('xpLeaderboardContent').innerHTML=`
-    ${change!==0?`<div style="font-family:'Share Tech Mono';font-size:11px;color:${change>0?'var(--success)':'var(--danger)'};margin-bottom:12px;">${change>0?'↑':'↓'} ${Math.abs(change)}% vs LAST WEEK</div>`:''}
-    ${all.slice(0,5).map((w,i)=>`<div class="lboard-row">
-      <div class="lboard-rank">#${i+1}</div>
-      <div class="lboard-week">${w.week||'Week '+i}</div>
-      <div class="lboard-xp">${w.xp} XP</div>
-    </div>`).join('')}`;
+  // Goal Tracker
+  const gtEl=document.getElementById('goalTrackerContent');
+  if(gtEl){
+    const goals=state.goals||{};
+    const goalKeys=Object.keys(goals);
+    gtEl.innerHTML=goalKeys.length===0
+      ?'<div class="empty-state" style="padding:12px;">[ CLICK 🎯 ON A STAT TO SET GOALS ]</div>'
+      :goalKeys.map(stat=>{
+        const g=goals[stat];const current=state.stats[stat];
+        const pct=Math.min(100,Math.round((current/g.target)*100));
+        const deadline=new Date(g.date);const today=new Date();
+        const daysLeft=Math.ceil((deadline-today)/(1000*60*60*24));
+        const needed=Math.ceil((g.target-current)/Math.max(1,daysLeft));
+        const behind=daysLeft>0&&needed>2;
+        return `<div class="goal-card">
+          <div class="goal-stat-name"><span>${TYPE_ICONS[stat]} ${stat.toUpperCase()} → ${g.target}</span><span style="color:${behind?'var(--danger)':'var(--muted)'};">${daysLeft}d left</span></div>
+          <div class="bar-track" style="margin:5px 0;"><div class="bar-fill" style="width:${pct}%;${behind?'background:var(--danger);':''}"></div></div>
+          <div class="goal-progress-text">${current}/${g.target} (${pct}%) · ${behind?'⚠ FALLING BEHIND':'On track ✓'}</div>
+        </div>`;
+      }).join('');
+  }
 
   // Prestige History
-  document.getElementById('prestigeHistoryContent').innerHTML=state.prestige===0?'<div class="empty-state" style="padding:16px;">[ REACH LEVEL '+MAX_LEVEL+' TO PRESTIGE ]</div>':
-    state.prestigeHistory.map((p,i)=>`<div class="prestige-entry"><span style="font-size:24px;">⭐</span><div><div style="font-family:'Orbitron';font-size:13px;color:var(--gold);">PRESTIGE ${toRoman(i+1)}</div><div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);">${p.date} · ${p.totalXP} XP earned</div></div></div>`).join('');
+  const phEl=document.getElementById('prestigeHistoryContent');
+  if(phEl){
+    const ph=state.prestigeHistory||[];
+    const PLIMIT=3;
+    const phVisible=_slice(ph,'prestige',PLIMIT);
+    phEl.innerHTML=state.prestige===0
+      ?'<div class="empty-state" style="padding:12px;">[ REACH LEVEL '+MAX_LEVEL+' TO PRESTIGE ]</div>'
+      :phVisible.map((p,i)=>`
+        <div class="prestige-entry">
+          <span style="font-size:22px;">⭐</span>
+          <div>
+            <div style="font-family:'Orbitron';font-size:12px;color:var(--gold);">PRESTIGE ${toRoman(i+1)}</div>
+            <div style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);">${p.date} · ${p.totalXP} XP</div>
+          </div>
+        </div>`).join('') + seeMoreBtn('prestige', ph.length, PLIMIT);
+  }
 }
 
 // ====== RENDER: QUESTS ======
@@ -1125,38 +1282,38 @@ function renderStatsGrid(){
 // ====== RENDER: PLAYER ======
 function renderPlayer(){
   const pct=Math.min(100,(state.xp/state.xpNeeded)*100);
-  document.getElementById('xpBar').style.width=pct+'%';
-  document.getElementById('xpLabel').textContent=state.xp+' / '+state.xpNeeded+' XP';
-  document.getElementById('levelDisplay').innerHTML=state.level+'<span>LEVEL</span>';
+  const xpBar=document.getElementById('xpBar');
+  const xpLabel=document.getElementById('xpLabel');
+  const levelDisplay=document.getElementById('levelDisplay');
+  const rankBadge=document.getElementById('rankBadge');
+  const playerName=document.getElementById('playerName');
+  const playerTitle=document.getElementById('playerTitle');
+  if(xpBar) xpBar.style.width=pct+'%';
+  if(xpLabel) xpLabel.textContent=state.xp+' / '+state.xpNeeded+' XP';
+  if(levelDisplay) levelDisplay.innerHTML=state.level+'<span style="font-size:11px;color:var(--muted);display:block;margin-top:2px;">LEVEL</span>';
   const rankIdx=Math.min(RANKS.length-1,Math.floor((state.level-1)/2));
-  document.getElementById('rankBadge').textContent='RANK '+RANKS[rankIdx];
-  document.getElementById('playerName').textContent=state.hunterName;
-  document.getElementById('playerTitle').textContent=getRankTitle(rankIdx)+' ✏️';
-  document.getElementById('totalQuests').textContent=state.totalQuests;
-  document.getElementById('totalXP').textContent=state.totalXP;
-  document.getElementById('totalDays').textContent=state.streak;
-  // Show crystals in records if element exists
+  if(rankBadge) rankBadge.textContent='RANK '+RANKS[rankIdx];
+  if(playerName) playerName.textContent=state.hunterName;
+  if(playerTitle) playerTitle.textContent=getRankTitle(rankIdx)+' ✏️';
+  const tq=document.getElementById('totalQuests'); if(tq) tq.textContent=state.totalQuests;
+  const tx=document.getElementById('totalXP'); if(tx) tx.textContent=state.totalXP;
+  const td=document.getElementById('totalDays'); if(td) td.textContent=state.streak;
   const crystalEl=document.getElementById('totalCrystals');
   if(crystalEl) crystalEl.textContent='💎'+(state.crystals||0);
-  updateAvatarDisplay();updatePlayerCodeDisplay();
-  // Prestige stars
+  updateAvatarDisplay(); updatePlayerCodeDisplay();
   const stars=document.getElementById('prestigeStars');
   if(stars) stars.textContent=Array(state.prestige).fill('⭐').join('');
-  // Prestige button
   const pb=document.getElementById('prestigeBtn');
   if(pb) pb.style.display=state.level>=MAX_LEVEL?'block':'none';
-  // Guild badge
   const gb=document.getElementById('guildBadge');
   if(gb){gb.style.display=state.guild?'block':'none';if(state.guild)gb.textContent='⚜ '+state.guild.name;}
-  // Daily score
   const today=new Date().toISOString().split('T')[0];
   const todayScore=(state.dailyScores||{})[today]||0;
   const scores=Object.values(state.dailyScores||{});
-  document.getElementById('dailyScore').textContent=todayScore;
-  document.getElementById('bestDayScore').textContent=scores.length?Math.max(...scores):0;
-  document.getElementById('avgDayScore').textContent=scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length):0;
-  // Sound btn
-  document.getElementById('soundBtn').textContent=state.soundOn?'🔊 SOUND ON':'🔇 SOUND OFF';
+  const ds=document.getElementById('dailyScore'); if(ds) ds.textContent=todayScore;
+  const bs=document.getElementById('bestDayScore'); if(bs) bs.textContent=scores.length?Math.max(...scores):0;
+  const avgEl=document.getElementById('avgDayScore');
+  if(avgEl) avgEl.textContent=scores.length?Math.round(scores.reduce((a,b)=>a+b,0)/scores.length):0;
   renderComboPanel();
   updateRankBgEffect();
 }
@@ -1179,46 +1336,238 @@ function renderStatsDist(){
   }).join('');
 }
 
+// ====== SEE MORE HELPER ======
+// Tracks expanded state for each section by key
+const _expanded = {};
+
+function seeMoreBtn(key, total, limit){
+  if(total <= limit) return '';
+  const hidden = total - limit;
+  const open = _expanded[key];
+  return `<button onclick="_toggleExpand('${key}')" style="
+    width:100%;margin-top:6px;padding:7px;cursor:pointer;
+    background:transparent;border:1px dashed var(--border2);
+    color:var(--muted);font-family:'Share Tech Mono',monospace;
+    font-size:10px;letter-spacing:1px;border-radius:3px;transition:all 0.2s;"
+    onmouseover="this.style.borderColor='var(--glow)';this.style.color='var(--glow)'"
+    onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">
+    ${open ? '▲ SEE LESS' : `▼ SEE MORE (${hidden} more)`}
+  </button>`;
+}
+
+function _toggleExpand(key){
+  _expanded[key] = !_expanded[key];
+  // Re-render the relevant section
+  const map = {
+    history:    ()=>renderHistory(),
+    badges:     ()=>renderBadges(),
+    chains:     ()=>renderChains(),
+    habits:     ()=>renderHabits(),
+    prestige:   ()=>renderDashboard(),
+    leaderboard:()=>renderDashboard(),
+    shadow:     ()=>renderShadowArmy(),
+    weeklyrep:  ()=>renderWeeklyPreview(),
+    milestones: ()=>renderMilestones(),
+    skills:     ()=>renderSkills(),
+  };
+  if(map[key]) map[key]();
+}
+
+function _slice(arr, key, limit=5){
+  return _expanded[key] ? arr : arr.slice(0, limit);
+}
+
 // ====== RENDER: HISTORY ======
 function renderHistory(){
   const c=document.getElementById('historyList');
-  c.innerHTML=state.history.length===0?`<div style="text-align:center;color:var(--muted);font-family:'Share Tech Mono';font-size:11px;padding:20px;">[ AWAITING FIRST ACTIVITY ]</div>`:
-    state.history.map(h=>`<div class="history-item"><span class="h-time">${h.time}</span><span class="h-msg" style="${h.type==='penalty'?'color:var(--danger);opacity:1;':''}">${h.msg}</span><span class="h-xp" style="${h.type==='penalty'?'color:var(--danger);':''}">${h.xp}</span></div>`).join('');
+  if(!c) return;
+  if(!state.history.length){
+    c.innerHTML=`<div style="text-align:center;color:var(--muted);font-family:'Share Tech Mono';font-size:11px;padding:20px;">[ AWAITING FIRST ACTIVITY ]</div>`;
+    return;
+  }
+  const LIMIT=5;
+  const visible=_slice(state.history,'history',LIMIT);
+  c.innerHTML=visible.map(h=>`
+    <div class="history-item">
+      <span class="h-time">${h.time}</span>
+      <span class="h-msg" style="${h.type==='penalty'?'color:var(--danger);opacity:1;':''}">${h.msg}</span>
+      <span class="h-xp" style="${h.type==='penalty'?'color:var(--danger);':''}">${h.xp}</span>
+    </div>`).join('')
+    + seeMoreBtn('history', state.history.length, LIMIT);
 }
 
 // ====== RENDER: RADAR ======
 function renderRadar(){
   const canvas=document.getElementById('radarCanvas');if(!canvas) return;
-  const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height,cx=W/2,cy=H/2,maxR=100,maxV=99;
-  const keys=['intelligence','agility','vitality','strength','perception'],labels=['INT','AGI','VIT','STR','PER'],n=keys.length;
+
+  // Fill parent width
+  const parent=canvas.parentElement;
+  const size=Math.min(parent?parent.offsetWidth:320, 320);
+  canvas.width=size; canvas.height=size;
+
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  const cx=W/2, cy=H/2;
+  const maxR=Math.min(W,H)*0.38;
+  const maxV=99;
+
+  const keys   =['intelligence','agility','vitality','strength','perception'];
+  const labels =['INT','AGI','VIT','STR','PER'];
+  const colors =['#60c0ff','#60ffb0','#ffd060','#ff6060','#cc80ff'];
+  const n=keys.length;
+
   ctx.clearRect(0,0,W,H);
-  function pt(i,f){const a=(Math.PI*2*i)/n-Math.PI/2;return{x:cx+Math.cos(a)*maxR*f,y:cy+Math.sin(a)*maxR*f};}
-  for(let l=1;l<=4;l++){ctx.beginPath();for(let i=0;i<n;i++){const p=pt(i,l/4);i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);}ctx.closePath();ctx.strokeStyle='rgba(0,170,255,0.15)';ctx.lineWidth=1;ctx.stroke();}
-  for(let i=0;i<n;i++){const p=pt(i,1);ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(p.x,p.y);ctx.strokeStyle='rgba(0,170,255,0.2)';ctx.lineWidth=1;ctx.stroke();}
-  const vals=keys.map(k=>state.stats[k]/maxV);
-  ctx.beginPath();for(let i=0;i<n;i++){const p=pt(i,vals[i]);i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);}ctx.closePath();
-  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,maxR);g.addColorStop(0,'rgba(0,212,255,0.35)');g.addColorStop(1,'rgba(0,68,204,0.15)');ctx.fillStyle=g;ctx.fill();
-  ctx.strokeStyle='rgba(0,212,255,0.9)';ctx.lineWidth=2;ctx.shadowColor='#00aaff';ctx.shadowBlur=8;ctx.stroke();ctx.shadowBlur=0;
-  for(let i=0;i<n;i++){const p=pt(i,vals[i]);ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fillStyle='#00d4ff';ctx.shadowColor='#00aaff';ctx.shadowBlur=10;ctx.fill();ctx.shadowBlur=0;}
-  ctx.font='600 11px Orbitron,monospace';ctx.textAlign='center';ctx.textBaseline='middle';
-  for(let i=0;i<n;i++){const p=pt(i,1.22);ctx.fillStyle='#3a5a7a';ctx.fillText(labels[i],p.x,p.y);}
+
+  function pt(i,f){
+    const a=(Math.PI*2*i)/n - Math.PI/2;
+    return {x:cx+Math.cos(a)*maxR*f, y:cy+Math.sin(a)*maxR*f};
+  }
+
+  // ── Background fill ──
+  ctx.fillStyle='rgba(0,10,25,0.4)';
+  ctx.beginPath();
+  for(let i=0;i<n;i++){const p=pt(i,1);i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);}
+  ctx.closePath(); ctx.fill();
+
+  // ── Grid rings with value labels ──
+  const rings=5;
+  for(let l=1;l<=rings;l++){
+    const f=l/rings;
+    ctx.beginPath();
+    for(let i=0;i<n;i++){const p=pt(i,f);i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);}
+    ctx.closePath();
+    ctx.strokeStyle=`rgba(0,170,255,${l===rings?0.25:0.1})`;
+    ctx.lineWidth=l===rings?1.5:1;
+    ctx.stroke();
+    // Ring value label (on the right spoke)
+    const val=Math.round(maxV*f);
+    const rp=pt(0,f+0.03);
+    ctx.font='8px Share Tech Mono,monospace';
+    ctx.fillStyle='rgba(58,90,122,0.7)';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText(val,rp.x+2,rp.y);
+  }
+
+  // ── Spokes ──
+  for(let i=0;i<n;i++){
+    const p=pt(i,1);
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(p.x,p.y);
+    ctx.strokeStyle='rgba(0,170,255,0.18)';
+    ctx.lineWidth=1; ctx.stroke();
+  }
+
+  // ── Filled shape with gradient ──
+  const vals=keys.map(k=>Math.max(0.03,(parseInt(state.stats[k])||1)/maxV));
+  ctx.beginPath();
+  for(let i=0;i<n;i++){const p=pt(i,vals[i]);i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);}
+  ctx.closePath();
+  const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,maxR);
+  grad.addColorStop(0,'rgba(0,212,255,0.45)');
+  grad.addColorStop(0.6,'rgba(0,100,255,0.25)');
+  grad.addColorStop(1,'rgba(0,50,200,0.08)');
+  ctx.fillStyle=grad; ctx.fill();
+
+  // Glow stroke
+  ctx.strokeStyle='rgba(0,212,255,0.95)';
+  ctx.lineWidth=2.5;
+  ctx.shadowColor='#00aaff'; ctx.shadowBlur=14;
+  ctx.beginPath();
+  for(let i=0;i<n;i++){const p=pt(i,vals[i]);i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);}
+  ctx.closePath(); ctx.stroke(); ctx.shadowBlur=0;
+
+  // ── Colored dots + value labels per stat ──
+  for(let i=0;i<n;i++){
+    const p=pt(i,vals[i]);
+    const rawVal=parseInt(state.stats[keys[i]])||1;
+    const col=colors[i];
+
+    // Outer glow
+    ctx.beginPath(); ctx.arc(p.x,p.y,8,0,Math.PI*2);
+    ctx.fillStyle=col.replace(')',',0.18)').replace('rgb','rgba')||'rgba(0,212,255,0.18)';
+    ctx.fill();
+
+    // Dot
+    ctx.beginPath(); ctx.arc(p.x,p.y,5,0,Math.PI*2);
+    ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=12; ctx.fill(); ctx.shadowBlur=0;
+
+    // White shine
+    ctx.beginPath(); ctx.arc(p.x-1.5,p.y-1.5,2,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.fill();
+
+    // Value label next to dot
+    const a=(Math.PI*2*i)/n - Math.PI/2;
+    const lx=p.x+Math.cos(a)*18;
+    const ly=p.y+Math.sin(a)*14;
+    ctx.font='bold 11px Orbitron,monospace';
+    ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=6;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(rawVal,lx,ly); ctx.shadowBlur=0;
+  }
+
+  // ── Axis labels (further out) ──
+  ctx.font='bold 11px Orbitron,monospace';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(let i=0;i<n;i++){
+    const p=pt(i,1.32);
+    ctx.fillStyle=colors[i];
+    ctx.shadowColor=colors[i]; ctx.shadowBlur=8;
+    ctx.fillText(labels[i],p.x,p.y);
+    ctx.shadowBlur=0;
+  }
+
+  // ── Center glow ──
+  const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,16);
+  cg.addColorStop(0,'rgba(0,212,255,0.5)');
+  cg.addColorStop(1,'rgba(0,212,255,0)');
+  ctx.fillStyle=cg;
+  ctx.beginPath(); ctx.arc(cx,cy,16,0,Math.PI*2); ctx.fill();
+
+  // ── Update power score + rank label ──
   const avg=keys.reduce((s,k)=>s+(parseInt(state.stats[k])||1),0)/n;
-  document.getElementById('radarScore').textContent=isNaN(avg)?'1.00':avg.toFixed(2);
+  const scoreEl=document.getElementById('radarScore');
+  if(scoreEl) scoreEl.textContent=isNaN(avg)?'1.00':avg.toFixed(2);
+
+  const rankEl=document.getElementById('radarRank');
+  if(rankEl){
+    const powerRank=
+      avg>=80?'SHADOW MONARCH 👑':
+      avg>=60?'S-RANK HUNTER ⚡':
+      avg>=45?'A-RANK HUNTER':
+      avg>=30?'B-RANK HUNTER':
+      avg>=20?'C-RANK HUNTER':
+      avg>=12?'D-RANK HUNTER':
+      'E-RANK HUNTER';
+    rankEl.textContent=powerRank;
+    rankEl.style.color=avg>=80?'#cc00ff':avg>=60?'#ffd700':avg>=45?'#00d4ff':'var(--muted)';
+  }
 }
 
 // ====== RENDER: SHADOW ARMY ======
 function renderShadowArmy(){
   const count=Math.floor(state.totalQuests/10);
-  document.getElementById('shadowCount').textContent=count;
-  document.getElementById('shadowSoldiers').innerHTML=Array.from({length:Math.min(count,30)},()=>'<span class="shadow-soldier">💀</span>').join('');
+  const sc=document.getElementById('shadowCount');if(sc) sc.textContent=count;
+  const ss=document.getElementById('shadowSoldiers');if(!ss) return;
+  const LIMIT=10;
+  const showCount=_expanded['shadow']?Math.min(count,50):Math.min(count,LIMIT);
+  ss.innerHTML=Array.from({length:showCount},()=>'<span class="shadow-soldier">💀</span>').join('')
+    + (count>LIMIT?seeMoreBtn('shadow',count,LIMIT):'');
 }
 
 // ====== RENDER: SKILLS ======
 function renderSkills(){
-  document.getElementById('skillList').innerHTML=SKILLS.map(s=>{
+  const el=document.getElementById('skillList');if(!el) return;
+  const LIMIT=4;
+  const visible=_slice(SKILLS,'skills',LIMIT);
+  el.innerHTML=visible.map(s=>{
     const unlocked=state.skills.includes(s.id);
-    return `<div class="skill-item ${unlocked?'unlocked':''}"><div class="skill-icon">${s.icon}</div><div><div class="skill-name">${s.name}</div><div class="skill-req">${s.desc} ${unlocked?'✓':'('+state.stats[s.stat]+'/'+s.req+')'}</div></div></div>`;
-  }).join('');
+    return `<div class="skill-item ${unlocked?'unlocked':''}">
+      <div class="skill-icon">${s.icon}</div>
+      <div>
+        <div class="skill-name">${s.name}</div>
+        <div class="skill-req">${s.desc} ${unlocked?'✓':'('+state.stats[s.stat]+'/'+s.req+')'}</div>
+      </div>
+    </div>`;
+  }).join('') + seeMoreBtn('skills', SKILLS.length, LIMIT);
 }
 
 // ====== RENDER: BOSS ======
@@ -1257,55 +1606,259 @@ function renderWeeklyPreview(){
 
 // ====== RENDER: MILESTONES ======
 function renderMilestones(){
-  document.getElementById('milestoneList').innerHTML=MILESTONES.map(m=>{
+  const el=document.getElementById('milestoneList');if(!el) return;
+  const LIMIT=4;
+  const visible=_slice(MILESTONES,'milestones',LIMIT);
+  el.innerHTML=visible.map(m=>{
     const done=state.milestonesAchieved.includes(m.id);
     return `<div class="milestone-item ${done?'achieved':''}"><div class="milestone-icon">${m.icon}</div><div><div class="milestone-name">${m.name}</div><div class="milestone-req">${m.desc} ${done?'✓':''}</div></div></div>`;
-  }).join('');
+  }).join('') + seeMoreBtn('milestones', MILESTONES.length, LIMIT);
 }
 
 // ====== RENDER: GEAR ======
+
 function renderGear(){
   const inv=document.getElementById('gearInventory'),equip=document.getElementById('equippedGear'),bonusEl=document.getElementById('gearBonus');
   if(!inv||!equip) return;
   recalcGearBonuses();
+
+  // Ensure lockedGear array exists
+  if(!state.lockedGear) state.lockedGear=[];
+
   const bonuses=state.gearBonuses||{};
   if(bonusEl) bonusEl.textContent=Object.entries(bonuses).filter(([,v])=>v>0).map(([k,v])=>'+'+v+' '+k.toUpperCase()).join(', ')||'+0';
+
+  // Equipped
   const equipped=(state.gear||[]).filter(g=>state.equippedGear.includes(g.uid));
-  equip.innerHTML=equipped.length===0?'<div class="empty-state" style="padding:12px;">[ NO GEAR EQUIPPED ]</div>':equipped.map(g=>`<div class="gear-slot"><div class="gear-slot-icon">${g.icon}</div><div><div class="gear-slot-name">${g.name}</div><div class="gear-slot-stat">+${g.bonus} ${g.stat.toUpperCase()}</div></div></div>`).join('');
-  const unequipped=(state.gear||[]).filter(g=>!state.equippedGear.includes(g.uid));
-  inv.innerHTML=unequipped.length===0?'<div class="empty-state">[ COMPLETE QUESTS FOR GEAR DROPS! ]</div>':unequipped.map(g=>`<div class="gear-item gear-rarity-${g.rarity}" onclick="equipGear(${g.uid})"><div style="font-size:24px;">${g.icon}</div><div><div class="gear-name">${g.name}</div><div class="gear-bonus-text">+${g.bonus} ${g.stat.toUpperCase()}</div></div><span style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);margin-left:auto;">${g.rarity.toUpperCase()}</span></div>`).join('');
+  equip.innerHTML=equipped.length===0
+    ?'<div class="empty-state" style="padding:12px;">[ NO GEAR EQUIPPED ]</div>'
+    :equipped.map(g=>`
+      <div class="gear-slot">
+        <div class="gear-slot-icon">${g.icon}</div>
+        <div style="flex:1;">
+          <div class="gear-slot-name">${g.name} ${state.lockedGear.includes(g.uid)?'🔒':''}</div>
+          <div class="gear-slot-stat">+${g.bonus} ${g.stat.toUpperCase()}</div>
+        </div>
+        <button onclick="unequipGear(${g.uid})" style="font-family:'Share Tech Mono';font-size:8px;padding:3px 7px;background:transparent;border:1px solid var(--muted);color:var(--muted);cursor:pointer;border-radius:2px;">REMOVE</button>
+      </div>`).join('');
+
+  // Unequipped — apply sort
+  let unequipped=(state.gear||[]).filter(g=>!state.equippedGear.includes(g.uid));
+  const RARITY_ORDER={common:1,rare:2,epic:3,legendary:4};
+  if(gearSortBy==='rarity')       unequipped=[...unequipped].sort((a,b)=>RARITY_ORDER[b.rarity]-RARITY_ORDER[a.rarity]);
+  else if(gearSortBy==='stat')    unequipped=[...unequipped].sort((a,b)=>a.stat.localeCompare(b.stat));
+  else if(gearSortBy==='bonus')   unequipped=[...unequipped].sort((a,b)=>b.bonus-a.bonus);
+  else if(gearSortBy==='name')    unequipped=[...unequipped].sort((a,b)=>a.name.localeCompare(b.name));
+  else if(gearSortBy==='locked')  unequipped=[...unequipped].sort((a,b)=>(state.lockedGear.includes(b.uid)?1:0)-(state.lockedGear.includes(a.uid)?1:0));
+
+  if(unequipped.length===0){
+    inv.innerHTML=`
+      <div style="margin-bottom:8px;">${renderGearSortBar()}</div>
+      <div class="empty-state">[ COMPLETE QUESTS FOR GEAR DROPS! ]</div>`;
+    return;
+  }
+
+  const LIMIT=5;
+  const visible=_expanded['gear']?unequipped:unequipped.slice(0,LIMIT);
+  const hasMore=unequipped.length>LIMIT;
+
+  const itemsHtml=visible.map(g=>{
+    const locked=state.lockedGear.includes(g.uid);
+    return `
+      <div class="gear-item gear-rarity-${g.rarity}" style="${locked?'border-color:rgba(255,215,0,0.4);background:rgba(255,215,0,0.03);':''}">
+        <div style="font-size:20px;">${g.icon}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="gear-name" style="display:flex;align-items:center;gap:4px;">
+            ${g.name}
+            ${locked?'<span style="font-size:10px;">🔒</span>':''}
+          </div>
+          <div class="gear-bonus-text">+${g.bonus} ${g.stat.toUpperCase()}</div>
+          <div style="font-family:'Share Tech Mono';font-size:8px;color:var(--muted);">${g.rarity.toUpperCase()}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
+          <button onclick="equipGear(${g.uid})" style="font-family:'Share Tech Mono';font-size:8px;padding:3px 7px;background:rgba(0,100,255,0.08);border:1px solid var(--glow);color:var(--glow);cursor:pointer;border-radius:2px;white-space:nowrap;">EQUIP</button>
+          <button onclick="toggleGearLock(${g.uid})" style="font-family:'Share Tech Mono';font-size:8px;padding:3px 7px;background:${locked?'rgba(255,215,0,0.08)':'transparent'};border:1px solid ${locked?'var(--gold)':'var(--muted)'};color:${locked?'var(--gold)':'var(--muted)'};cursor:pointer;border-radius:2px;">
+            ${locked?'🔒 LOCK':'🔓 LOCK'}
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+
+  const seeMoreBtn=hasMore?`
+    <button onclick="toggleGearInventory()" style="
+      width:100%;margin-top:6px;padding:7px;
+      background:transparent;border:1px dashed var(--border2);
+      color:var(--muted);font-family:'Share Tech Mono',monospace;
+      font-size:10px;letter-spacing:1px;cursor:pointer;border-radius:3px;transition:all 0.2s;"
+      onmouseover="this.style.borderColor='var(--glow)';this.style.color='var(--glow)'"
+      onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">
+      ${_expanded['gear']?'▲ SEE LESS':`▼ SEE MORE (${unequipped.length-LIMIT} more items)`}
+    </button>`:'';
+
+  inv.innerHTML=`
+    <div style="margin-bottom:8px;">${renderGearSortBar()}</div>
+    ${itemsHtml}
+    ${seeMoreBtn}`;
+}
+
+function renderGearSortBar(){
+  const opts=[
+    {v:'default', l:'DEFAULT'},
+    {v:'rarity',  l:'RARITY'},
+    {v:'bonus',   l:'BONUS'},
+    {v:'stat',    l:'STAT'},
+    {v:'locked',  l:'🔒 LOCKED'},
+    {v:'name',    l:'NAME'},
+  ];
+  return `<div style="display:flex;gap:3px;flex-wrap:wrap;align-items:center;">
+    <span style="font-family:'Share Tech Mono';font-size:8px;color:var(--muted);margin-right:2px;">SORT:</span>
+    ${opts.map(o=>`
+      <button onclick="setGearSort('${o.v}')" style="
+        padding:2px 7px;font-family:'Share Tech Mono';font-size:8px;
+        background:${gearSortBy===o.v?'rgba(0,170,255,0.12)':'transparent'};
+        border:1px solid ${gearSortBy===o.v?'var(--glow)':'var(--border)'};
+        color:${gearSortBy===o.v?'var(--glow)':'var(--muted)'};
+        cursor:pointer;border-radius:2px;transition:all 0.15s;white-space:nowrap;">
+        ${o.l}
+      </button>`).join('')}
+  </div>`;
+}
+
+function setGearSort(by){
+  gearSortBy=by;
+  renderGear();
+}
+
+function toggleGearInventory(){
+  _expanded['gear']=!_expanded['gear'];
+  renderGear();
+}
+
+function toggleGearLock(uid){
+  if(!state.lockedGear) state.lockedGear=[];
+  const idx=state.lockedGear.indexOf(uid);
+  if(idx===-1){
+    state.lockedGear.push(uid);
+    notify('🔒 GEAR LOCKED — cannot be sold');
+  } else {
+    state.lockedGear.splice(idx,1);
+    notify('🔓 GEAR UNLOCKED');
+  }
+  save();
+  renderGear();
+  renderShop();
 }
 
 // ====== RENDER: BADGES ======
 function renderBadges(){
   checkBadges();
-  document.getElementById('badgeGrid').innerHTML=BADGES_LIST.map(b=>{
+  const el=document.getElementById('badgeGrid');if(!el) return;
+  const LIMIT=6;
+  const visible=_slice(BADGES_LIST,'badges',LIMIT);
+  el.innerHTML=visible.map(b=>{
     const earned=state.badges.includes(b.id);
     return `<div class="badge-card ${earned?'earned':'locked'}"><div class="badge-icon">${b.icon}</div><div class="badge-name">${b.name}</div><div class="badge-desc">${b.desc}</div>${earned?'<div style="font-family:\'Share Tech Mono\';font-size:10px;color:var(--success);margin-top:6px;">✓ EARNED</div>':''}</div>`;
-  }).join('');
+  }).join('') + seeMoreBtn('badges', BADGES_LIST.length, LIMIT);
 }
 
 // ====== RENDER: EVOLUTION CHART ======
 function renderEvolutionChart(){
-  const canvas=document.getElementById('evolutionChart'),canvas2=document.getElementById('dailyScoreChart');
+  const canvas=document.getElementById('evolutionChart');
+  const canvas2=document.getElementById('dailyScoreChart');
   if(!canvas||!canvas2) return;
+
+  // Set canvas size to match display size
+  canvas.width=canvas.offsetWidth||600;
+  canvas.height=200;
+  canvas2.width=canvas2.offsetWidth||600;
+  canvas2.height=140;
+
   const ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;
-  ctx.clearRect(0,0,W,H);ctx.fillStyle='rgba(0,20,40,0.5)';ctx.fillRect(0,0,W,H);
-  const keys=['strength','intelligence','agility','vitality','perception'],colors=['#ff6060','#60c0ff','#60ffb0','#ffd060','#cc80ff'];
-  const today=new Date(),dates=Array.from({length:30},(_,i)=>{const d=new Date(today);d.setDate(d.getDate()-(29-i));return d.toISOString().split('T')[0];});
+  const keys=['strength','intelligence','agility','vitality','perception'];
+  const colors=['#ff6060','#60c0ff','#60ffb0','#ffd060','#cc80ff'];
+  const today=new Date();
+  const dates=Array.from({length:30},(_,i)=>{
+    const d=new Date(today);d.setDate(d.getDate()-(29-i));
+    return d.toISOString().split('T')[0];
+  });
+
+  // Build stat history — fill gaps with last known value
   const statData={};
-  keys.forEach(k=>{let last=state.stats[k];statData[k]=dates.map(d=>{if(state.statHistory&&state.statHistory[d])last=state.statHistory[d][k]||last;return last;});});
-  const maxVal=Math.max(...Object.values(statData).flat())+2;
-  const pL=40,pR=20,pT=20,pB=30,cW=W-pL-pR,cH=H-pT-pB;
-  for(let i=0;i<=5;i++){const y=pT+cH-(i/5)*cH;ctx.strokeStyle='rgba(0,170,255,0.1)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pL,y);ctx.lineTo(W-pR,y);ctx.stroke();ctx.fillStyle='rgba(58,90,122,0.8)';ctx.font='10px Share Tech Mono';ctx.textAlign='right';ctx.fillText(Math.round((i/5)*maxVal),pL-4,y+4);}
-  keys.forEach((k,ki)=>{const data=statData[k];ctx.beginPath();data.forEach((v,i)=>{const x=pL+(i/(dates.length-1))*cW,y=pT+cH-((v/maxVal)*cH);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});ctx.strokeStyle=colors[ki];ctx.lineWidth=2;ctx.shadowColor=colors[ki];ctx.shadowBlur=6;ctx.stroke();ctx.shadowBlur=0;});
-  keys.forEach((k,i)=>{ctx.fillStyle=colors[i];ctx.fillRect(pL+i*120,H-18,10,10);ctx.fillStyle='rgba(200,230,255,0.7)';ctx.font='11px Share Tech Mono';ctx.textAlign='left';ctx.fillText(k.toUpperCase(),pL+i*120+14,H-8);});
+  keys.forEach(k=>{
+    let last=parseInt(state.stats[k])||1;
+    statData[k]=dates.map(d=>{
+      if(state.statHistory&&state.statHistory[d]&&state.statHistory[d][k])
+        last=parseInt(state.statHistory[d][k])||last;
+      return last;
+    });
+  });
+
+  const allVals=Object.values(statData).flat();
+  const maxVal=Math.max(...allVals,5)+2;
+  const pL=36,pR=16,pT=18,pB=28,cW=W-pL-pR,cH=H-pT-pB;
+
+  // Background
+  ctx.fillStyle='rgba(0,10,25,0.8)';ctx.fillRect(0,0,W,H);
+
+  // Grid lines
+  for(let i=0;i<=4;i++){
+    const y=pT+cH-(i/4)*cH;
+    ctx.strokeStyle='rgba(0,100,180,0.15)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(pL,y);ctx.lineTo(W-pR,y);ctx.stroke();
+    ctx.fillStyle='rgba(58,90,122,0.7)';ctx.font='9px Share Tech Mono';
+    ctx.textAlign='right';ctx.fillText(Math.round((i/4)*maxVal),pL-4,y+3);
+  }
+
+  // Lines
+  keys.forEach((k,ki)=>{
+    const data=statData[k];
+    ctx.beginPath();
+    data.forEach((v,i)=>{
+      const x=pL+(i/(dates.length-1))*cW;
+      const y=pT+cH-((v/maxVal)*cH);
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=colors[ki];ctx.lineWidth=2;
+    ctx.shadowColor=colors[ki];ctx.shadowBlur=5;ctx.stroke();ctx.shadowBlur=0;
+
+    // Dot at end
+    const lastX=pL+cW,lastY=pT+cH-((data[data.length-1]/maxVal)*cH);
+    ctx.fillStyle=colors[ki];ctx.beginPath();ctx.arc(lastX,lastY,3,0,Math.PI*2);ctx.fill();
+  });
+
+  // Legend
+  keys.forEach((k,i)=>{
+    const lx=pL+i*(cW/5);
+    ctx.fillStyle=colors[i];ctx.fillRect(lx,H-16,8,8);
+    ctx.fillStyle='rgba(180,210,240,0.7)';ctx.font='9px Share Tech Mono';
+    ctx.textAlign='left';ctx.fillText(k.slice(0,3).toUpperCase(),lx+10,H-8);
+  });
+
+  // ── Daily XP chart ──
   const ctx2=canvas2.getContext('2d'),W2=canvas2.width,H2=canvas2.height;
-  ctx2.clearRect(0,0,W2,H2);ctx2.fillStyle='rgba(0,20,40,0.5)';ctx2.fillRect(0,0,W2,H2);
-  const scoreData=dates.map(d=>(state.dailyScores||{})[d]||0),maxScore=Math.max(...scoreData,1);
-  const bw=(W2-pL-pR)/dates.length-2;
-  scoreData.forEach((v,i)=>{const x=pL+i*((W2-pL-pR)/dates.length)+1,bh=(v/maxScore)*(H2-pT-pB),y=pT+(H2-pT-pB)-bh;ctx2.fillStyle=v>0?'rgba(0,212,255,0.6)':'rgba(0,40,80,0.4)';ctx2.fillRect(x,y,Math.max(bw,2),bh);});
-  ctx2.fillStyle='rgba(200,230,255,0.5)';ctx2.font='11px Share Tech Mono';ctx2.textAlign='left';ctx2.fillText('DAILY XP SCORE (LAST 30 DAYS)',pL,pT-6);
+  ctx2.fillStyle='rgba(0,10,25,0.8)';ctx2.fillRect(0,0,W2,H2);
+
+  const scoreData=dates.map(d=>(state.dailyScores||{})[d]||0);
+  const maxScore=Math.max(...scoreData,1);
+  const barW=Math.max(2,(W2-pL-pR)/dates.length-1);
+
+  scoreData.forEach((v,i)=>{
+    const x=pL+i*(W2-pL-pR)/dates.length;
+    const bh=Math.max(1,((v/maxScore)*(H2-pT-pB)));
+    const y=pT+(H2-pT-pB)-bh;
+    const isToday=dates[i]===today.toISOString().split('T')[0];
+    ctx2.fillStyle=isToday?'rgba(0,255,136,0.7)':v>0?'rgba(0,180,255,0.55)':'rgba(0,30,60,0.4)';
+    ctx2.fillRect(x,y,barW,bh);
+    if(isToday){ctx2.fillStyle='rgba(0,255,136,0.3)';ctx2.fillRect(x-1,pT,barW+2,H2-pT-pB);}
+  });
+
+  // XP axis labels
+  ctx2.fillStyle='rgba(58,90,122,0.7)';ctx2.font='9px Share Tech Mono';
+  ctx2.textAlign='right';
+  ctx2.fillText(maxScore,pL-4,pT+8);
+  ctx2.fillText(0,pL-4,H2-pB);
+  ctx2.fillStyle='rgba(0,180,255,0.5)';ctx2.textAlign='left';
+  ctx2.fillText('30-DAY XP  (green=today)',pL+2,pT+10);
 }
 
 // ====== EXPORT CARD ======
@@ -1370,15 +1923,12 @@ function showTutorialStep() {
   document.getElementById('tutorialDesc').textContent = step.desc;
   document.getElementById('tutorialNextBtn').textContent = tutorialStep === TUTORIAL_STEPS.length-1 ? '✓ FINISH' : 'NEXT →';
 
-  // Position card
-  if (step.pos === 'center') {
-    card.style.top = '50%'; card.style.left = '50%';
-    card.style.transform = 'translate(-50%, -50%)';
-    card.style.right = 'auto'; card.style.bottom = 'auto';
-  } else if (step.pos === 'right') {
-    card.style.top = '120px'; card.style.right = '20px';
-    card.style.left = 'auto'; card.style.transform = 'none';
-  }
+  // Always center — no jumping
+  card.style.top = '50%';
+  card.style.left = '50%';
+  card.style.right = 'auto';
+  card.style.bottom = 'auto';
+  card.style.transform = 'translate(-50%, -50%)';
 
   // Dots
   document.getElementById('tutorialDots').innerHTML = TUTORIAL_STEPS.map((_,i) =>
@@ -1401,21 +1951,46 @@ function skipTutorial() {
 let gameRunning=false,gameAnim=null,gs={};
 
 const SHOP_ITEMS=[
-  {id:'iron_sword',icon:'⚔️',name:'IRON SWORD',rarity:'common',stat:'strength',bonus:2,price:30,desc:'+2 STR · Attack Speed +5%'},
-  {id:'shadow_dagger',icon:'🗡️',name:'SHADOW DAGGER',rarity:'rare',stat:'agility',bonus:3,price:80,desc:'+3 AGI · Crit Chance +10%'},
-  {id:'mage_ring',icon:'💍',name:'MAGE RING',rarity:'rare',stat:'intelligence',bonus:3,price:80,desc:'+3 INT · Skill damage +15%'},
-  {id:'iron_shield',icon:'🛡️',name:'IRON SHIELD',rarity:'common',stat:'vitality',bonus:2,price:30,desc:'+2 VIT · Block chance +8%'},
-  {id:'shadow_armor',icon:'🥋',name:'SHADOW ARMOR',rarity:'epic',stat:'vitality',bonus:6,price:200,desc:'+6 VIT · Shadow resist +20%'},
-  {id:'shadow_blade',icon:'🌑',name:'SHADOW BLADE',rarity:'epic',stat:'strength',bonus:6,price:200,desc:'+6 STR · Life steal +10%'},
-  {id:'eye_of_shadow',icon:'👁️',name:'EYE OF SHADOW',rarity:'epic',stat:'perception',bonus:5,price:180,desc:'+5 PER · Enemy reveal'},
-  {id:'arise_crown',icon:'💎',name:'ARISE CROWN',rarity:'legendary',stat:'perception',bonus:10,price:500,desc:'+10 PER · All skills enhanced'},
-  {id:'monarch_robe',icon:'👑',name:'MONARCH ROBE',rarity:'legendary',stat:'vitality',bonus:12,price:600,desc:'+12 VIT · Invincibility frames +50%'},
-  {id:'death_scythe',icon:'💀',name:'DEATH SCYTHE',rarity:'legendary',stat:'strength',bonus:15,price:800,desc:'+15 STR · ARISE cooldown -50%'},
-  {id:'void_boots',icon:'🥾',name:'VOID BOOTS',rarity:'rare',stat:'agility',bonus:4,price:100,desc:'+4 AGI · Move speed +20%'},
-  {id:'wisdom_crown',icon:'📿',name:'WISDOM AMULET',rarity:'rare',stat:'intelligence',bonus:4,price:100,desc:'+4 INT · XP gain +10%'},
+  // ── COMMON ──
+  {id:'iron_sword',    icon:'⚔️', name:'IRON SWORD',      rarity:'common',    stat:'strength',     bonus:2,  price:30,  desc:'+2 STR · Basic melee weapon'},
+  {id:'iron_shield',   icon:'🛡️', name:'IRON SHIELD',     rarity:'common',    stat:'vitality',     bonus:2,  price:30,  desc:'+2 VIT · Block chance +8%'},
+  {id:'leather_boots', icon:'👟', name:'LEATHER BOOTS',   rarity:'common',    stat:'agility',      bonus:2,  price:30,  desc:'+2 AGI · Movement speed +5%'},
+  {id:'cloth_hood',    icon:'🪖', name:'CLOTH HOOD',      rarity:'common',    stat:'perception',   bonus:2,  price:30,  desc:'+2 PER · Awareness +5%'},
+  {id:'wood_staff',    icon:'🪄', name:'WOODEN STAFF',    rarity:'common',    stat:'intelligence', bonus:2,  price:30,  desc:'+2 INT · Spell focus +5%'},
+  {id:'iron_ring',     icon:'🔘', name:'IRON RING',       rarity:'common',    stat:'vitality',     bonus:1,  price:20,  desc:'+1 VIT · Endurance +3%'},
+  {id:'crude_dagger',  icon:'🔪', name:'CRUDE DAGGER',    rarity:'common',    stat:'agility',      bonus:2,  price:25,  desc:'+2 AGI · Quick draw'},
+  // ── RARE ──
+  {id:'shadow_dagger', icon:'🗡️', name:'SHADOW DAGGER',   rarity:'rare',      stat:'agility',      bonus:4,  price:80,  desc:'+4 AGI · Crit Chance +10%'},
+  {id:'mage_ring',     icon:'💍', name:'MAGE RING',       rarity:'rare',      stat:'intelligence', bonus:3,  price:80,  desc:'+3 INT · Skill damage +15%'},
+  {id:'void_boots',    icon:'🥾', name:'VOID BOOTS',      rarity:'rare',      stat:'agility',      bonus:4,  price:100, desc:'+4 AGI · Move speed +20%'},
+  {id:'wisdom_crown',  icon:'📿', name:'WISDOM AMULET',   rarity:'rare',      stat:'intelligence', bonus:4,  price:100, desc:'+4 INT · XP gain +10%'},
+  {id:'hunter_vest',   icon:'🦺', name:'HUNTER VEST',     rarity:'rare',      stat:'vitality',     bonus:5,  price:90,  desc:'+5 VIT · Dungeon entry bonus'},
+  {id:'swift_gloves',  icon:'🧤', name:'SWIFT GLOVES',    rarity:'rare',      stat:'agility',      bonus:3,  price:75,  desc:'+3 AGI · Attack speed +12%'},
+  {id:'crystal_lens',  icon:'🔭', name:'CRYSTAL LENS',    rarity:'rare',      stat:'perception',   bonus:5,  price:95,  desc:'+5 PER · Reveal hidden quests'},
+  {id:'battle_axe',    icon:'🪓', name:'BATTLE AXE',      rarity:'rare',      stat:'strength',     bonus:5,  price:90,  desc:'+5 STR · Heavy attack +20%'},
+  // ── EPIC ──
+  {id:'shadow_armor',  icon:'🥋', name:'SHADOW ARMOR',    rarity:'epic',      stat:'vitality',     bonus:6,  price:200, desc:'+6 VIT · Shadow resist +20%'},
+  {id:'shadow_blade',  icon:'🌑', name:'SHADOW BLADE',    rarity:'epic',      stat:'strength',     bonus:6,  price:200, desc:'+6 STR · Life steal +10%'},
+  {id:'eye_of_shadow', icon:'👁️', name:'EYE OF SHADOW',   rarity:'epic',      stat:'perception',   bonus:5,  price:180, desc:'+5 PER · Enemy detect +30%'},
+  {id:'arcane_tome',   icon:'📖', name:'ARCANE TOME',     rarity:'epic',      stat:'intelligence', bonus:7,  price:220, desc:'+7 INT · Quest XP +15%'},
+  {id:'phantom_cloak', icon:'🌫️', name:'PHANTOM CLOAK',   rarity:'epic',      stat:'agility',      bonus:7,  price:220, desc:'+7 AGI · Dodge chance +15%'},
+  {id:'war_helmet',    icon:'⛑️', name:'WAR HELMET',      rarity:'epic',      stat:'vitality',     bonus:8,  price:240, desc:'+8 VIT · Penalty reduction'},
+  {id:'void_gauntlet', icon:'🦾', name:'VOID GAUNTLET',   rarity:'epic',      stat:'strength',     bonus:7,  price:210, desc:'+7 STR · Combo duration +2s'},
+  {id:'shadow_heart',  icon:'🖤', name:'SHADOW HEART',    rarity:'epic',      stat:'perception',   bonus:6,  price:190, desc:'+6 PER · Shadow army +1 slot'},
+  // ── LEGENDARY ──
+  {id:'arise_crown',   icon:'💎', name:'ARISE CROWN',     rarity:'legendary', stat:'perception',   bonus:10, price:500, desc:'+10 PER · All skills enhanced'},
+  {id:'monarch_robe',  icon:'👑', name:'MONARCH ROBE',    rarity:'legendary', stat:'vitality',     bonus:12, price:600, desc:'+12 VIT · Invincibility +50%'},
+  {id:'death_scythe',  icon:'💀', name:'DEATH SCYTHE',    rarity:'legendary', stat:'strength',     bonus:15, price:800, desc:'+15 STR · ARISE CD -50%'},
+  {id:'gods_tome',     icon:'📜', name:'GOD\'S TOME',     rarity:'legendary', stat:'intelligence', bonus:14, price:750, desc:'+14 INT · Double quest XP'},
+  {id:'shadow_wings',  icon:'🦋', name:'SHADOW WINGS',    rarity:'legendary', stat:'agility',      bonus:12, price:700, desc:'+12 AGI · Ignore penalties once/day'},
+  {id:'eternal_eye',   icon:'🌟', name:'ETERNAL EYE',     rarity:'legendary', stat:'perception',   bonus:11, price:650, desc:'+11 PER · See all hidden quests'},
+  {id:'jinwoo_coat',   icon:'🧥', name:'JINWOO\'S COAT',  rarity:'legendary', stat:'strength',     bonus:16, price:999, desc:'+16 STR · Shadow Monarch aura'},
 ];
 
 const SELL_VALUES={common:10,rare:25,epic:60,legendary:150};
+
+// Gear sort state
+let gearSortBy = 'default'; // default | rarity | stat | bonus | name
 
 function initGameState(){
   return {
@@ -1470,10 +2045,20 @@ function renderShop(){
   if(!gear.length){sellEl.innerHTML='<div class="empty-state" style="padding:16px;">[ NO GEAR TO SELL ]</div>';return;}
   sellEl.innerHTML=gear.map(g=>{
     const val=SELL_VALUES[g.rarity]||10;
-    return `<div class="sell-item gear-rarity-${g.rarity}" onclick="sellGear(${g.uid})">
-      <div style="font-size:22px;">${g.icon}</div>
-      <div style="flex:1;"><div class="gear-name">${g.name}</div><div class="gear-bonus-text">+${g.bonus} ${g.stat.toUpperCase()}</div></div>
-      <div style="font-family:'Orbitron';font-size:12px;color:var(--gold);">💎 ${val}</div>
+    const locked=(state.lockedGear||[]).includes(g.uid);
+    return `<div class="sell-item gear-rarity-${g.rarity}" style="${locked?'opacity:0.45;':''}">
+      <div style="font-size:20px;">${g.icon}</div>
+      <div style="flex:1;min-width:0;">
+        <div class="gear-name">${g.name} ${locked?'🔒':''}</div>
+        <div class="gear-bonus-text">+${g.bonus} ${g.stat.toUpperCase()}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+        <div style="font-family:'Orbitron';font-size:11px;color:var(--gold);">💎${val}</div>
+        ${locked
+          ?`<button onclick="toggleGearLock(${g.uid})" style="font-family:'Share Tech Mono';font-size:8px;padding:2px 6px;background:rgba(255,215,0,0.08);border:1px solid var(--gold);color:var(--gold);cursor:pointer;border-radius:2px;">🔓 UNLOCK</button>`
+          :`<button onclick="sellGear(${g.uid})" style="font-family:'Share Tech Mono';font-size:8px;padding:2px 6px;background:rgba(255,51,102,0.06);border:1px solid var(--danger);color:var(--danger);cursor:pointer;border-radius:2px;">SELL</button>`
+        }
+      </div>
     </div>`;
   }).join('');
 }
@@ -1507,6 +2092,11 @@ function equipShopGear(id){
 
 function sellGear(uid){
   const g=state.gear.find(x=>x.uid===uid);if(!g) return;
+  // Block if locked
+  if((state.lockedGear||[]).includes(uid)){
+    notify('🔒 GEAR IS LOCKED — unlock it first!');
+    return;
+  }
   const val=SELL_VALUES[g.rarity]||10;
   state.gear=state.gear.filter(x=>x.uid!==uid);
   state.equippedGear=state.equippedGear.filter(id=>id!==uid);
@@ -2189,11 +2779,494 @@ document.addEventListener('keyup',e=>{if(gs.keys) gs.keys[e.key]=false;});
   },{passive:false});
 })();
 
+// ====== SIDEBAR ======
+function toggleSidebar(){
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  const btn = document.getElementById('hamburgerBtn');
+  const isOpen = sidebar.classList.contains('open');
+  if(isOpen){ closeSidebar(); }
+  else {
+    sidebar.classList.add('open');
+    overlay.classList.add('active');
+    btn.classList.add('open');
+    btn.textContent = '✕';
+    updateSidebarInfo();
+  }
+}
+
+function closeSidebar(){
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  const btn = document.getElementById('hamburgerBtn');
+  sidebar.classList.remove('open');
+  overlay.classList.remove('active');
+  btn.classList.remove('open');
+  btn.textContent = '☰';
+}
+
+function updateSidebarInfo(){
+  // Hunter name + rank
+  const nameEl = document.getElementById('sidebarName');
+  const rankEl = document.getElementById('sidebarRank');
+  const avatarEl = document.getElementById('sidebarAvatar');
+  if(nameEl) nameEl.textContent = state.hunterName || 'HUNTER';
+  if(rankEl){
+    const rankIdx = Math.min(RANKS.length-1, Math.floor((state.level-1)/2));
+    rankEl.textContent = `RANK ${RANKS[rankIdx]} · LVL ${state.level}`;
+  }
+  if(avatarEl){
+    if(state.avatarImg){
+      avatarEl.innerHTML = `<img src="${state.avatarImg}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;"/>`;
+    } else {
+      const avatarIdx = Math.min(AVATARS.length-1, Math.floor((state.level-1)/10));
+      avatarEl.textContent = AVATARS[avatarIdx];
+    }
+  }
+
+  // Sound badge
+  const soundBadge = document.getElementById('sidebarSoundBadge');
+  if(soundBadge){
+    soundBadge.textContent = state.soundOn !== false ? 'ON' : 'OFF';
+    soundBadge.className = 'sb-badge' + (state.soundOn !== false ? ' on' : '');
+  }
+
+  // Music badge
+  const musicBadge = document.getElementById('sidebarMusicBadge');
+  if(musicBadge){
+    musicBadge.textContent = musicOn ? 'ON' : 'OFF';
+    musicBadge.className = 'sb-badge' + (musicOn ? ' on' : '');
+  }
+
+  // Theme badge
+  const themeBadge = document.getElementById('sidebarThemeBadge');
+  if(themeBadge){
+    const isArise = state.theme === 'arise';
+    themeBadge.textContent = isArise ? 'ON' : 'OFF';
+    themeBadge.className = 'sb-badge' + (isArise ? ' on' : '');
+  }
+}
+
+// Close sidebar on Escape key
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') closeSidebar();
+});
+
+// ====== WISDOM SYSTEM ======
+const WISDOM_LIST = [
+  // Level 1
+  { level:1, quote:"The beginning is always the hardest. But you have already begun.", source:"— System Message, Floor 1", lore:"When Sung Jinwoo first entered the Double Dungeon, he had no power. Only will." },
+  // Level 3
+  { level:3, quote:"Even the weakest hunter has the potential to become the strongest. The question is — do you have the resolve?", source:"— Sung Jinwoo", lore:"Jinwoo was ranked E — the absolute weakest. He never stopped. Neither should you." },
+  // Level 5
+  { level:5, quote:"I alone level up.", source:"— Sung Jinwoo", lore:"The most iconic line in Solo Leveling. Jinwoo realized the System chose only him. Your life system chooses only YOU." },
+  // Level 7
+  { level:7, quote:"The strong do not need to brag. Their results speak for themselves.", source:"— System Observation", lore:"S-Rank hunters don't announce their power. They demonstrate it through action." },
+  // Level 10
+  { level:10, quote:"Pain is temporary. Weakness, if you accept it, becomes permanent.", source:"— Sung Jinwoo", lore:"At Level 10 you have proven you are not weak. You push through. Every day." },
+  // Level 13
+  { level:13, quote:"Arise.", source:"— Sung Jinwoo, Shadow Monarch", lore:"The word that changes everything. Jinwoo does not just defeat enemies. He raises them. Your past failures? Rise above them." },
+  // Level 15
+  { level:15, quote:"There is no limit to what a person can achieve if they refuse to stop growing.", source:"— Goto Ryuji, S-Rank Hunter", lore:"Even rival hunters acknowledged that growth has no ceiling. You are proving this every day." },
+  // Level 18
+  { level:18, quote:"I did not become strong because I wanted power. I became strong because there were people I needed to protect.", source:"— Sung Jinwoo", lore:"Real strength comes from purpose. What is your purpose, Hunter?" },
+  // Level 20
+  { level:20, quote:"The difference between those who survive and those who don't — is the will to keep moving when everything says stop.", source:"— System Log", lore:"Level 20. You have defied the odds. Most hunters quit before this point. You did not." },
+  // Level 23
+  { level:23, quote:"Every scar on a hunter is a story of survival. Wear them with pride.", source:"— Hunter Guild Record", lore:"You have failed quests. Taken penalties. Lost streaks. And you came back. Every time." },
+  // Level 25
+  { level:25, quote:"An S-Rank is not born. They are forged — through a thousand battles, ten thousand decisions, and one unbreakable will.", source:"— Hunter Association Report", lore:"Level 25. S-Rank territory. You are no longer ordinary. You never were." },
+  // Level 28
+  { level:28, quote:"The System does not make mistakes. If it chose you — it knows what you are capable of, even before you do.", source:"— System Administrator Log", lore:"The System saw something in Jinwoo that even he could not see at first. Trust the process." },
+  // Level 30 (Prestige threshold)
+  { level:30, quote:"I was not given power. I earned every single fragment of it. One quest, one battle, one day at a time.", source:"— Sung Jinwoo, Shadow Monarch", lore:"You have reached the threshold of Prestige. This is where legends begin." },
+];
+
+function getUnlockedWisdom(){
+  return WISDOM_LIST.filter(w => state.level >= w.level);
+}
+
+function getCurrentWisdom(){
+  const unlocked = getUnlockedWisdom();
+  if(!unlocked.length) return null;
+  // Show the highest unlocked wisdom
+  return unlocked[unlocked.length - 1];
+}
+
+function checkWisdomUnlock(oldLevel, newLevel){
+  WISDOM_LIST.forEach(w => {
+    if(w.level > oldLevel && w.level <= newLevel){
+      // New wisdom unlocked!
+      setTimeout(() => {
+        document.getElementById('wisdomUnlockLevel').textContent = 'LEVEL ' + w.level + ' REACHED';
+        document.getElementById('wisdomUnlockQuote').textContent = '"' + w.quote + '"';
+        document.getElementById('wisdomUnlockSource').textContent = w.source;
+        document.getElementById('wisdomUnlockOverlay').classList.add('active');
+        setTimeout(() => document.getElementById('wisdomUnlockOverlay').classList.remove('active'), 5000);
+      }, 2500); // Show after level up animation
+    }
+  });
+}
+
+document.getElementById('wisdomUnlockOverlay').addEventListener('click', function(){
+  this.classList.remove('active');
+});
+
+function renderWisdomPanel(){
+  const el = document.getElementById('wisdomDisplay');
+  if(!el) return;
+  const unlocked = getUnlockedWisdom();
+  if(!unlocked.length){
+    el.innerHTML = `<div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);text-align:center;padding:14px;">COMPLETE QUESTS TO REACH LEVEL 1</div>`;
+    return;
+  }
+  const idx = (state.pinnedWisdom !== undefined && state.pinnedWisdom < unlocked.length)
+    ? state.pinnedWisdom : unlocked.length - 1;
+  const w = unlocked[idx];
+  el.innerHTML = `
+    <div class="wisdom-current">
+      <div class="wisdom-current-quote">"${w.quote}"</div>
+      <div class="wisdom-current-source">${w.source}</div>
+    </div>
+    <div style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);text-align:center;margin-top:6px;">
+      ${unlocked.length} / ${WISDOM_LIST.length} WISDOM UNLOCKED
+    </div>`;
+}
+
+function openWisdomBook(){
+  const unlocked = getUnlockedWisdom();
+  const locked = WISDOM_LIST.filter(w => state.level < w.level);
+  const pinnedIdx = state.pinnedWisdom !== undefined ? state.pinnedWisdom : unlocked.length - 1;
+  let html = `<div style="font-family:'Share Tech Mono';font-size:9px;color:#ffcc44;margin-bottom:14px;text-align:center;border:1px solid rgba(255,204,68,0.2);padding:8px;border-radius:3px;">
+    📌 CLICK ANY QUOTE TO PIN IT TO YOUR WISDOM PANEL
+  </div>`;
+  unlocked.slice().reverse().forEach((w, ri) => {
+    const realIdx = unlocked.length - 1 - ri;
+    const isPinned = pinnedIdx === realIdx;
+    html += `<div class="wisdom-card" onclick="pinWisdom(${realIdx})" style="cursor:pointer;${isPinned?'border-color:#ffcc44;background:rgba(255,204,68,0.06);box-shadow:0 0 10px rgba(255,204,68,0.12);':''}transition:all 0.2s;">
+      <div class="wisdom-level-badge" style="${isPinned?'background:rgba(255,204,68,0.2);':''}">${isPinned?'📌 PINNED':'LEVEL '+w.level}</div>
+      <div class="wisdom-quote">"${w.quote}"</div>
+      <div class="wisdom-source">${w.source}</div>
+      <div style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);margin-top:8px;border-top:1px solid rgba(255,204,68,0.12);padding-top:7px;">${w.lore}</div>
+      <div style="font-family:'Share Tech Mono';font-size:8px;color:${isPinned?'#ffcc44':'var(--muted)'};margin-top:5px;text-align:right;">${isPinned?'✓ DISPLAYED NOW':'TAP TO DISPLAY →'}</div>
+    </div>`;
+  });
+  if(locked.length > 0){
+    html += `<div style="font-family:'Share Tech Mono';font-size:10px;color:var(--muted);text-align:center;margin:12px 0;letter-spacing:2px;">— ${locked.length} MORE AWAIT —</div>`;
+    locked.slice(0,3).forEach(w => {
+      html += `<div class="wisdom-card locked">
+        <div class="wisdom-level-badge">LEVEL ${w.level}</div>
+        <div class="wisdom-quote" style="color:var(--muted);">████████████████████████████</div>
+        <div class="wisdom-source">Reach Level ${w.level} to unlock</div>
+      </div>`;
+    });
+  }
+  document.getElementById('wisdomBookContent').innerHTML = html;
+  document.getElementById('wisdomModal').classList.add('active');
+}
+
+function pinWisdom(idx){
+  state.pinnedWisdom = idx;
+  save();
+  renderWisdomPanel();
+  openWisdomBook();
+  notify('📌 WISDOM PINNED TO PANEL!');
+}
+
+// ====== AMBIENT MUSIC SYSTEM ======
+let musicOn = false;
+let musicNodes = {};
+let musicCtx = null;
+
+function getMusicCtx(){
+  if(!musicCtx) musicCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return musicCtx;
+}
+
+function toggleMusic(){
+  musicOn = !musicOn;
+  if(musicOn){
+    startAmbientMusic();
+    notify('🎵 MUSIC ON');
+  } else {
+    stopAmbientMusic();
+    notify('🎵 MUSIC OFF');
+  }
+  state.musicOn = musicOn;
+  save();
+  updateSidebarInfo();
+}
+
+function startAmbientMusic(){
+  try{
+    const ctx = getMusicCtx();
+    if(ctx.state === 'suspended') ctx.resume();
+
+    // Stop any existing music
+    stopAmbientMusic();
+
+    const nodes = {};
+
+    // === LAYER 1: Deep drone bass (dark dungeon atmosphere) ===
+    const drone = ctx.createOscillator();
+    const droneGain = ctx.createGain();
+    drone.type = 'sine';
+    drone.frequency.setValueAtTime(55, ctx.currentTime); // A1 note — deep
+    drone.frequency.setValueAtTime(58.27, ctx.currentTime + 8); // slightly detune
+    drone.frequency.setValueAtTime(55, ctx.currentTime + 16);
+    droneGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    drone.connect(droneGain);
+    droneGain.connect(ctx.destination);
+    drone.start();
+    nodes.drone = drone;
+    nodes.droneGain = droneGain;
+
+    // === LAYER 2: Mid pad — eerie sustained chord ===
+    const pad = ctx.createOscillator();
+    const padGain = ctx.createGain();
+    const padFilter = ctx.createBiquadFilter();
+    pad.type = 'triangle';
+    pad.frequency.value = 110; // A2
+    padFilter.type = 'lowpass';
+    padFilter.frequency.value = 800;
+    padFilter.Q.value = 2;
+    pad.connect(padFilter);
+    padFilter.connect(padGain);
+    padGain.gain.setValueAtTime(0, ctx.currentTime);
+    padGain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 3);
+    padGain.connect(ctx.destination);
+    pad.start();
+    nodes.pad = pad;
+    nodes.padGain = padGain;
+
+    // === LAYER 3: Fifth harmony (perfect 5th above drone) ===
+    const fifth = ctx.createOscillator();
+    const fifthGain = ctx.createGain();
+    fifth.type = 'sine';
+    fifth.frequency.value = 82.41; // E2 — perfect 5th above A1
+    fifthGain.gain.setValueAtTime(0.04, ctx.currentTime);
+    fifth.connect(fifthGain);
+    fifthGain.connect(ctx.destination);
+    fifth.start();
+    nodes.fifth = fifth;
+    nodes.fifthGain = fifthGain;
+
+    // === LAYER 4: Slow pulsing arpeggio — creates dark melody ===
+    const NOTES = [110, 130.81, 146.83, 110, 98, 110, 130.81, 164.81]; // Am pentatonic
+    let noteIdx = 0;
+    const arp = ctx.createOscillator();
+    const arpGain = ctx.createGain();
+    const arpFilter = ctx.createBiquadFilter();
+    arp.type = 'triangle';
+    arp.frequency.value = NOTES[0];
+    arpFilter.type = 'bandpass';
+    arpFilter.frequency.value = 400;
+    arpFilter.Q.value = 3;
+    arpGain.gain.setValueAtTime(0.03, ctx.currentTime);
+    arp.connect(arpFilter);
+    arpFilter.connect(arpGain);
+    arpGain.connect(ctx.destination);
+    arp.start();
+    nodes.arp = arp;
+    nodes.arpGain = arpGain;
+
+    // Slowly step through notes
+    const arpInterval = setInterval(()=>{
+      if(!musicOn){ clearInterval(arpInterval); return; }
+      noteIdx = (noteIdx + 1) % NOTES.length;
+      arp.frequency.linearRampToValueAtTime(NOTES[noteIdx], ctx.currentTime + 0.3);
+      // Accent note — small volume pulse
+      arpGain.gain.setValueAtTime(0.05, ctx.currentTime);
+      arpGain.gain.linearRampToValueAtTime(0.02, ctx.currentTime + 1.5);
+    }, 2000);
+    nodes.arpInterval = arpInterval;
+
+    // === LAYER 5: Distant bell hits (sparse, atmospheric) ===
+    const bellInterval = setInterval(()=>{
+      if(!musicOn){ clearInterval(bellInterval); return; }
+      try{
+        const bell = ctx.createOscillator();
+        const bellGain = ctx.createGain();
+        bell.type = 'sine';
+        const bellNotes = [220, 261.63, 293.66, 329.63, 369.99];
+        bell.frequency.value = bellNotes[Math.floor(Math.random() * bellNotes.length)];
+        bellGain.gain.setValueAtTime(0.04, ctx.currentTime);
+        bellGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 4);
+        bell.connect(bellGain);
+        bellGain.connect(ctx.destination);
+        bell.start(ctx.currentTime);
+        bell.stop(ctx.currentTime + 4);
+      }catch(e){}
+    }, 4000 + Math.random() * 3000);
+    nodes.bellInterval = bellInterval;
+
+    // === LAYER 6: Low rumble — dungeon ambience ===
+    const rumble = ctx.createOscillator();
+    const rumbleGain = ctx.createGain();
+    const rumbleFilter = ctx.createBiquadFilter();
+    rumble.type = 'sawtooth';
+    rumble.frequency.value = 27.5; // Very low A0
+    rumbleFilter.type = 'lowpass';
+    rumbleFilter.frequency.value = 80;
+    rumbleGain.gain.setValueAtTime(0, ctx.currentTime);
+    rumbleGain.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 5);
+    rumble.connect(rumbleFilter);
+    rumbleFilter.connect(rumbleGain);
+    rumbleGain.connect(ctx.destination);
+    rumble.start();
+    nodes.rumble = rumble;
+    nodes.rumbleGain = rumbleGain;
+
+    musicNodes = nodes;
+    notify('🎵 DUNGEON AMBIENCE ACTIVE — ARISE FROM THE SHADOW');
+  } catch(e){
+    console.error('Music error:', e);
+    notify('🎵 Music unavailable in this browser');
+  }
+}
+
+function stopAmbientMusic(){
+  try{
+    if(musicNodes.arpInterval) clearInterval(musicNodes.arpInterval);
+    if(musicNodes.bellInterval) clearInterval(musicNodes.bellInterval);
+    ['drone','pad','fifth','arp','rumble'].forEach(k=>{
+      try{ if(musicNodes[k]) musicNodes[k].stop(); }catch(e){}
+    });
+  }catch(e){}
+  musicNodes = {};
+}
+
+// ====== QUEST COMPLETE ANIMATION ======
+function showQuestComplete(questName, xp, statType, multiplier){
+  const overlay = document.getElementById('questCompleteOverlay');
+  const TYPE_NAMES = {strength:'💪 STRENGTH',intelligence:'🧠 INTELLIGENCE',agility:'⚡ AGILITY',vitality:'❤️ VITALITY',perception:'👁️ PERCEPTION'};
+
+  document.getElementById('qcQuestName').textContent = questName;
+  document.getElementById('qcXP').textContent = '+' + xp + ' XP';
+  document.getElementById('qcStat').textContent = (TYPE_NAMES[statType]||statType.toUpperCase()) + ' +1';
+  const bonusEl = document.getElementById('qcBonus');
+  bonusEl.textContent = multiplier > 1 ? '🔥 ' + multiplier.toFixed(1) + 'x MULTIPLIER ACTIVE!' : '';
+
+  // Shoot light lines outward
+  const linesEl = document.getElementById('qcLines');
+  linesEl.innerHTML = Array.from({length:12},(_,i) => {
+    const angle = i * 30;
+    return `<div class="qc-line" style="transform:rotate(${angle}deg);animation-delay:${i*0.02}s;"></div>`;
+  }).join('');
+
+  overlay.classList.remove('hide');
+  overlay.classList.add('show');
+  playSound('complete');
+
+  // Auto-hide after 1.8s
+  clearTimeout(overlay._timer);
+  overlay._timer = setTimeout(()=>{
+    overlay.classList.remove('show');
+    overlay.classList.add('hide');
+    setTimeout(()=>{ overlay.classList.remove('hide'); linesEl.innerHTML=''; }, 400);
+  }, 1800);
+}
+
+// ====== WEEKLY REVIEW CUTSCENE ======
+function showWeeklyReview(){
+  const s = state.stats;
+  const best = Object.entries(s).sort((a,b)=>b[1]-a[1])[0];
+  const worst = Object.entries(s).sort((a,b)=>a[1]-b[1])[0];
+  const TYPE_ICONS = {strength:'💪',intelligence:'🧠',agility:'⚡',vitality:'❤️',perception:'👁️'};
+  const wisdom = getCurrentWisdom();
+  const daysActive = Math.max(1, Math.floor((Date.now()-(state.startDate||Date.now()))/86400000)+1);
+
+  const quotes = [
+    {q:"I did not become strong because I wanted power. I became strong because I had people I needed to protect.", s:"— Sung Jinwoo"},
+    {q:"The difference between those who survive and those who don't is the will to keep moving when everything says stop.", s:"— System Log"},
+    {q:"Every week is a new dungeon floor. You cleared this one.", s:"— Shadow Monarch"},
+    {q:"Pain from training fades. The strength you gain stays forever.", s:"— Hunter Association"},
+  ];
+  const quote = quotes[Math.floor(Date.now()/604800000) % quotes.length];
+
+  document.getElementById('wrContent').innerHTML = `
+    <div class="wr-label">◈ WEEKLY SYSTEM REPORT ◈</div>
+    <div class="wr-title">WEEK COMPLETE</div>
+    <div class="wr-sub">${state.hunterName} · RANK ${RANKS[Math.min(RANKS.length-1,Math.floor((state.level-1)/2))]} · LEVEL ${state.level}</div>
+    <div class="wr-stats-grid">
+      <div class="wr-stat" style="animation-delay:0.1s;">
+        <div class="wr-stat-num" style="color:var(--gold);">${state.weeklyQuests||0}</div>
+        <div class="wr-stat-label">QUESTS THIS WEEK</div>
+      </div>
+      <div class="wr-stat" style="animation-delay:0.2s;">
+        <div class="wr-stat-num" style="color:var(--success);">${state.streak}</div>
+        <div class="wr-stat-label">DAY STREAK 🔥</div>
+      </div>
+      <div class="wr-stat" style="animation-delay:0.3s;">
+        <div class="wr-stat-num" style="color:var(--accent);">${state.totalXP}</div>
+        <div class="wr-stat-label">TOTAL XP EARNED</div>
+      </div>
+      <div class="wr-stat" style="animation-delay:0.4s;">
+        <div class="wr-stat-num" style="color:var(--glow);">${TYPE_ICONS[best[0]]} ${best[1]}</div>
+        <div class="wr-stat-label">BEST STAT: ${best[0].toUpperCase()}</div>
+      </div>
+      <div class="wr-stat" style="animation-delay:0.5s;">
+        <div class="wr-stat-num" style="color:var(--danger);">${TYPE_ICONS[worst[0]]} ${worst[1]}</div>
+        <div class="wr-stat-label">NEEDS WORK: ${worst[0].toUpperCase()}</div>
+      </div>
+      <div class="wr-stat" style="animation-delay:0.6s;">
+        <div class="wr-stat-num" style="color:var(--purple);">${daysActive}</div>
+        <div class="wr-stat-label">DAYS ACTIVE TOTAL</div>
+      </div>
+    </div>
+    <div class="wr-quote">"${quote.q}"</div>
+    <div class="wr-quote-src">${quote.s}</div>
+    <button class="btn" onclick="closeWeeklyReview()" style="border-color:var(--glow);color:var(--glow);padding:12px 36px;font-size:12px;">⚔ CONTINUE</button>
+  `;
+
+  document.getElementById('weeklyReviewOverlay').classList.add('show');
+  playSound('levelup');
+}
+
+function closeWeeklyReview(){
+  document.getElementById('weeklyReviewOverlay').classList.remove('show');
+}
+
+// Check if it's Sunday and show weekly review once
+function checkWeeklyReview(){
+  const now = new Date();
+  const sunday = now.getDay() === 0;
+  const lastReview = state.lastWeeklyReview;
+  const thisWeek = `${now.getFullYear()}-W${Math.ceil((now - new Date(now.getFullYear(),0,1))/604800000)}`;
+  if(sunday && lastReview !== thisWeek && state.totalQuests > 0){
+    state.lastWeeklyReview = thisWeek;
+    save();
+    setTimeout(showWeeklyReview, 2000);
+  }
+}
+
 // ====== RENDER ALL ======
+function safeRender(fn){
+  try{ fn(); } catch(e){ console.warn('Render error in '+fn.name+':', e.message); }
+}
+
 function renderAll(){
-  renderPlayer();renderStatsGrid();renderStatsDist();renderQuests();renderHistory();renderRadar();
-  renderShadowArmy();renderSkills();renderBoss();renderCalendar();renderWeeklyPreview();
-  renderMilestones();renderDailyChallenge();renderTemplates();
+  safeRender(renderPlayer);
+  safeRender(renderStatsGrid);
+  safeRender(renderStatsDist);
+  safeRender(renderQuests);
+  safeRender(renderHistory);
+  safeRender(renderRadar);
+  safeRender(renderShadowArmy);
+  safeRender(renderSkills);
+  safeRender(renderBoss);
+  safeRender(renderCalendar);
+  safeRender(renderWeeklyPreview);
+  safeRender(renderMilestones);
+  safeRender(renderDailyChallenge);
+  safeRender(renderTemplates);
+  safeRender(renderWisdomPanel);
+  safeRender(renderGear);
+  safeRender(renderBadges);
+  safeRender(renderChains);
+  safeRender(renderHabits);
+  safeRender(renderDashboard);
+  safeRender(()=>{ initShop(); renderShop(); });
 }
 
 // ====== INIT ======
@@ -2216,5 +3289,13 @@ checkSeasonalEvent();
 updateRankBgEffect();
 if(state.prevRankIdx===undefined) state.prevRankIdx=Math.min(RANKS.length-1,Math.floor((state.level-1)/2));
 renderAll();
+// Render charts after layout settles
+setTimeout(()=>{ renderRadar(); renderEvolutionChart(); }, 300);
+// Check weekly review (Sunday only)
+checkWeeklyReview();
 // Auto-show tutorial for new users
 if (!state.tutorialDone) setTimeout(startTutorial, 1500);
+// Restore music state
+if(state.musicOn){ musicOn=true; startAmbientMusic(); }
+// Init sidebar info
+setTimeout(updateSidebarInfo, 100);
